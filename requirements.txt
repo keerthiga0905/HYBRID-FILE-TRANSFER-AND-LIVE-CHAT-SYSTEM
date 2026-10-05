@@ -1,0 +1,4 @@
+# Hybrid File Transfer and Live Chat System Dependencies
+# Python 3.12+ built-in libraries (socket, threading, hashlib, json, time, os, standard libs) are primary.
+# Flask is included for optional web monitoring dashboard later.
+flask>=3.0.0
