@@ -58,3 +58,33 @@
 [22:37:08] [TCPClientHandler-50225] INFO: HELLO response sent to 127.0.0.1:50225
 [22:37:08] [TCPClientHandler-50225] INFO: TCP Client disconnected: 127.0.0.1:50225
 [22:37:08] [MainThread] INFO: TCP Server stopped
+[22:40:50] [MainThread] INFO: Starting Hybrid Server...
+[22:40:50] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5000
+[22:41:06] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51321
+[22:41:06] [TCPClientHandler-51321] INFO: HELLO received from Client (127.0.0.1:51321)
+[22:41:06] [TCPClientHandler-51321] INFO: HELLO response sent to 127.0.0.1:51321
+[22:53:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:63737
+[22:53:03] [TCPClientHandler-63737] INFO: HELLO received from Keerthi (127.0.0.1:63737)
+[22:53:03] [TCPClientHandler-63737] INFO: HELLO response sent to 127.0.0.1:63737
+[22:55:08] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[22:55:08] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:55855
+[22:55:08] [TCPClientHandler-55855] INFO: HELLO received from ClientA (127.0.0.1:55855)
+[22:55:08] [TCPClientHandler-55855] INFO: HELLO response sent to 127.0.0.1:55855
+[22:55:08] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:55856
+[22:55:08] [TCPClientHandler-55855] INFO: TCP Client disconnected: 127.0.0.1:55855
+[22:55:08] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:55857
+[22:55:08] [TCPClientHandler-55856] INFO: HELLO received from ClientA (127.0.0.1:55856)
+[22:55:08] [TCPClientHandler-55856] INFO: HELLO response sent to 127.0.0.1:55856
+[22:55:08] [TCPClientHandler-55857] INFO: HELLO received from ClientB (127.0.0.1:55857)
+[22:55:08] [TCPClientHandler-55857] INFO: HELLO response sent to 127.0.0.1:55857
+[22:55:08] [TCPClientHandler-55857] INFO: HELLO received from ClientB_Repeat (127.0.0.1:55857)
+[22:55:08] [TCPClientHandler-55856] INFO: TCP Client disconnected: 127.0.0.1:55856
+[22:55:08] [TCPClientHandler-55857] INFO: HELLO response sent to 127.0.0.1:55857
+[22:55:08] [TCPClientHandler-55857] INFO: TCP Client disconnected: 127.0.0.1:55857
+[22:55:08] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:55858
+[22:55:08] [TCPClientHandler-55858] WARNING: Malformed payload from 127.0.0.1:55858: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[22:55:08] [TCPClientHandler-55858] INFO: TCP Client disconnected: 127.0.0.1:55858
+[22:55:08] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:55859
+[22:55:08] [TCPClientHandler-55859] INFO: HELLO received from PostErrorCheck (127.0.0.1:55859)
+[22:55:08] [TCPClientHandler-55859] INFO: HELLO response sent to 127.0.0.1:55859
+[22:55:08] [MainThread] INFO: TCP Server stopped

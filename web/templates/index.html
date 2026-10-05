@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HYBRID TRANSFER | Fast File Transfer & Real-Time Communication</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- App Container -->
+    <div id="app" class="app-layout">
+
+        <!-- Top Header Bar -->
+        <header class="topbar">
+            <div class="brand">
+                <div class="logo-icon">↕</div>
+                <div class="brand-text">
+                    <span class="brand-title">HYBRID <span class="accent-text">TRANSFER</span></span>
+                    <span class="brand-tagline">Fast File Transfer. Real-Time Communication.</span>
+                </div>
+            </div>
+
+            <div class="topbar-right">
+                <div class="server-badge" id="topbar-server">
+                    <span class="badge-label">Server:</span>
+                    <span class="badge-val" id="topbar-server-val">127.0.0.1</span>
+                </div>
+
+                <div class="status-pills">
+                    <div class="pill offline" id="pill-tcp">
+                        <span class="dot">●</span> TCP: <span class="pill-status">Offline</span>
+                    </div>
+                    <div class="pill offline" id="pill-udp">
+                        <span class="dot">●</span> UDP: <span class="pill-status">Offline</span>
+                    </div>
+                </div>
+
+                <div class="user-profile">
+                    <div class="avatar" id="user-avatar">K</div>
+                    <span class="user-name" id="user-name-display">Keerthi</span>
+                </div>
+
+                <button class="btn btn-connect" id="topbar-conn-btn" onclick="toggleConnectModal()">
+                    Connect
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Layout Body -->
+        <div class="main-container">
+            <!-- Sidebar Navigation -->
+            <nav class="sidebar">
+                <div class="nav-section">
+                    <div class="nav-header">NAVIGATION</div>
+                    <button class="nav-item active" onclick="switchTab('dashboard')">
+                        <span class="nav-icon">⌂</span> Dashboard
+                    </button>
+                    <button class="nav-item" onclick="switchTab('files')">
+                        <span class="nav-icon">📁</span> Files
+                    </button>
+                    <button class="nav-item" onclick="switchTab('transfers')">
+                        <span class="nav-icon">↕</span> Transfers
+                    </button>
+                    <button class="nav-item" onclick="switchTab('chat')">
+                        <span class="nav-icon">💬</span> Live Chat
+                    </button>
+                    <button class="nav-item" onclick="switchTab('network')">
+                        <span class="nav-icon">🌐</span> Network Monitor
+                    </button>
+                    <button class="nav-item" onclick="switchTab('statistics')">
+                        <span class="nav-icon">📊</span> Statistics
+                    </button>
+                    <button class="nav-item" onclick="switchTab('activity')">
+                        <span class="nav-icon">📝</span> Activity Logs
+                    </button>
+                    <button class="nav-item" onclick="switchTab('settings')">
+                        <span class="nav-icon">⚙</span> Settings
+                    </button>
+                </div>
+
+                <div class="sidebar-footer">
+                    <div class="protocol-visualizer-mini">
+                        <div class="proto-bar tcp-bar">
+                            <span class="label">TCP</span>
+                            <span class="desc">Reliable Files</span>
+                        </div>
+                        <div class="proto-bar udp-bar">
+                            <span class="label">UDP</span>
+                            <span class="desc">Fast Chat</span>
+                        </div>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Main Content Area -->
+            <main class="content-area">
+
+                <!-- DASHBOARD PAGE -->
+                <section id="page-dashboard" class="page-view active">
+                    <div class="page-header">
+                        <h2>Good evening, <span class="user-greeting" id="dash-greeting">Keerthi</span></h2>
+                        <p class="subtitle">Network overview and transfer activity monitor</p>
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="stats-grid">
+                        <div class="stat-card" id="card-tcp-status">
+                            <div class="stat-title">TCP FILE SERVER</div>
+                            <div class="stat-value status-text offline" id="dash-tcp-val">OFFLINE</div>
+                            <div class="stat-desc">Port 5000 / Stream Sockets</div>
+                        </div>
+
+                        <div class="stat-card" id="card-udp-status">
+                            <div class="stat-title">UDP CHAT SERVER</div>
+                            <div class="stat-value status-text offline" id="dash-udp-val">OFFLINE</div>
+                            <div class="stat-desc">Port 6000 / Datagrams</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-title">ONLINE USERS</div>
+                            <div class="stat-value" id="dash-online-val">1</div>
+                            <div class="stat-desc">Active Presence Heartbeats</div>
+                        </div>
+
+                        <div class="stat-card">
+                            <div class="stat-title">SERVER FILES</div>
+                            <div class="stat-value" id="dash-files-val">3</div>
+                            <div class="stat-desc">Available for TCP Download</div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="section-block">
+                        <h3>Quick Actions</h3>
+                        <div class="quick-actions-bar">
+                            <button class="btn btn-action" onclick="switchTab('files')">📁 Upload File</button>
+                            <button class="btn btn-action" onclick="switchTab('files')">↓ Download File</button>
+                            <button class="btn btn-action" onclick="switchTab('chat')">💬 Open Live Chat</button>
+                            <button class="btn btn-action" onclick="switchTab('network')">🌐 View Network Monitor</button>
+                        </div>
+                    </div>
+
+                    <!-- Protocol Comparison Cards -->
+                    <div class="section-block">
+                        <h3>Networking Architecture</h3>
+                        <div class="comparison-grid">
+                            <div class="comparison-card tcp-card">
+                                <div class="card-header-badge">TCP SOCKET (PORT 5000)</div>
+                                <h4>Transmission Control Protocol</h4>
+                                <ul>
+                                    <li>✓ Connection-Oriented (3-Way Handshake)</li>
+                                    <li>✓ 100% Guaranteed In-Order Delivery</li>
+                                    <li>✓ Automatic Operating System Retransmission</li>
+                                    <li>✓ Streaming SHA-256 Hash Verification</li>
+                                </ul>
+                                <div class="card-use-case">Used for: File Uploads, Downloads & Resumes</div>
+                            </div>
+
+                            <div class="comparison-card udp-card">
+                                <div class="card-header-badge">UDP SOCKET (PORT 6000)</div>
+                                <h4>User Datagram Protocol</h4>
+                                <ul>
+                                    <li>⚡ Connectionless Datagram Communication</li>
+                                    <li>⚡ Low Overhead & Minimal Latency</li>
+                                    <li>⚡ Application-Layer ACK & Timeout Retries</li>
+                                    <li>⚡ Presence Heartbeat & Duplicate Detection</li>
+                                </ul>
+                                <div class="card-use-case">Used for: Live Chat & Presence Tracking</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- FILES PAGE -->
+                <section id="page-files" class="page-view">
+                    <div class="page-header flex-between">
+                        <div>
+                            <h2>Files</h2>
+                            <p class="subtitle">Files available on the server repository</p>
+                        </div>
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="showUploadModal()">+ Upload File</button>
+                            <button class="btn btn-secondary" onclick="fetchFilesList()">🔄 Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Size</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="files-table-body">
+                                <tr>
+                                    <td>project.zip</td>
+                                    <td>25.4 MB</td>
+                                    <td>ZIP Archive</td>
+                                    <td><span class="tag tag-success">Available</span></td>
+                                    <td><button class="btn btn-sm btn-action">Download</button></td>
+                                </tr>
+                                <tr>
+                                    <td>notes.pdf</td>
+                                    <td>4.2 MB</td>
+                                    <td>PDF Document</td>
+                                    <td><span class="tag tag-success">Available</span></td>
+                                    <td><button class="btn btn-sm btn-action">Download</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <!-- TRANSFERS PAGE -->
+                <section id="page-transfers" class="page-view">
+                    <div class="page-header">
+                        <h2>Transfers</h2>
+                        <p class="subtitle">Active and past file transfer history</p>
+                    </div>
+                    <div id="transfers-list-container">
+                        <div class="empty-state">
+                            <p>No active file transfers currently running.</p>
+                            <button class="btn btn-primary" onclick="switchTab('files')">Start a File Transfer</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- LIVE CHAT PAGE -->
+                <section id="page-chat" class="page-view">
+                    <div class="page-header">
+                        <h2>Live Communication</h2>
+                        <p class="subtitle">Low-latency UDP Chat with Application-Layer ACK & Presence</p>
+                    </div>
+
+                    <div class="chat-layout">
+                        <div class="chat-main">
+                            <div class="chat-messages" id="chat-messages-list">
+                                <div class="sys-msg">Connect to server to join UDP live chat.</div>
+                            </div>
+                            <div class="chat-input-bar">
+                                <input type="text" id="chat-input" placeholder="Type a message over UDP datagram..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+                                <button class="btn btn-primary" onclick="sendChatMessage()">Send UDP</button>
+                            </div>
+                        </div>
+
+                        <div class="chat-sidebar">
+                            <div class="sidebar-header">ONLINE USERS (UDP)</div>
+                            <div class="online-users-list" id="online-users-list">
+                                <div class="user-row"><span class="dot online">●</span> Keerthi (You)</div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- NETWORK MONITOR PAGE -->
+                <section id="page-network" class="page-view">
+                    <div class="page-header">
+                        <h2>Network Monitor</h2>
+                        <p class="subtitle">Real-time socket metrics & TCP vs UDP visualizer</p>
+                    </div>
+                    <div class="network-diagram-box">
+                        <div class="node">CLIENT <br><small id="net-client-ip">127.0.0.1</small></div>
+                        <div class="pipes">
+                            <div class="pipe tcp-pipe">
+                                <span>TCP Port 5000 (Stream Socket)</span>
+                                <div class="packet-flow">➔ ➔ ➔</div>
+                            </div>
+                            <div class="pipe udp-pipe">
+                                <span>UDP Port 6000 (Datagram Socket)</span>
+                                <div class="packet-flow">➔ ➔ ➔</div>
+                            </div>
+                        </div>
+                        <div class="node">SERVER <br><small id="net-server-ip">127.0.0.1</small></div>
+                    </div>
+                </section>
+
+                <!-- STATISTICS PAGE -->
+                <section id="page-statistics" class="page-view">
+                    <div class="page-header">
+                        <h2>Network Statistics</h2>
+                        <p class="subtitle">Measured networking performance metrics</p>
+                    </div>
+                    <div class="stats-tables-grid">
+                        <div class="stat-box">
+                            <h3>TCP File Transfer Metrics</h3>
+                            <div class="metric-row"><span>TCP Socket Status</span> <strong id="stat-tcp-status">Connected</strong></div>
+                            <div class="metric-row"><span>Port</span> <strong>5000 / TCP</strong></div>
+                            <div class="metric-row"><span>Framing Protocol</span> <strong>4-Byte Big-Endian Length + JSON</strong></div>
+                            <div class="metric-row"><span>SHA-256 Integrity Verification</span> <strong>Passed</strong></div>
+                        </div>
+                        <div class="stat-box">
+                            <h3>UDP Communication Metrics</h3>
+                            <div class="metric-row"><span>UDP Socket Status</span> <strong id="stat-udp-status">Ready</strong></div>
+                            <div class="metric-row"><span>Port</span> <strong>6000 / UDP</strong></div>
+                            <div class="metric-row"><span>Application ACK Retry Timeout</span> <strong>1.0 sec</strong></div>
+                            <div class="metric-row"><span>Max Retries Limit</span> <strong>3 Retries</strong></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ACTIVITY LOGS PAGE -->
+                <section id="page-activity" class="page-view">
+                    <div class="page-header">
+                        <h2>Activity Logs</h2>
+                        <p class="subtitle">Real-time socket events from the backend</p>
+                    </div>
+                    <div class="logs-console" id="logs-console-box">
+                        <div class="log-line">[00:00:00] [INFO] HYBRID TRANSFER UI Initialized</div>
+                    </div>
+                </section>
+
+                <!-- SETTINGS PAGE -->
+                <section id="page-settings" class="page-view">
+                    <div class="page-header">
+                        <h2>Settings</h2>
+                        <p class="subtitle">Connection and application parameters</p>
+                    </div>
+                    <div class="settings-form">
+                        <div class="form-group">
+                            <label>Server IP Address</label>
+                            <input type="text" id="setting-host" value="127.0.0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>TCP Port</label>
+                            <input type="number" id="setting-tcp-port" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label>UDP Port</label>
+                            <input type="number" id="setting-udp-port" value="6000">
+                        </div>
+                        <div class="form-group">
+                            <label>Username</label>
+                            <input type="text" id="setting-username" value="Keerthi">
+                        </div>
+                        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                    </div>
+                </section>
+
+            </main>
+        </div>
+
+        <!-- Bottom Footer Status Bar -->
+        <footer class="statusbar">
+            <div class="status-item"><span class="dot" id="footer-tcp-dot">●</span> TCP: <span id="footer-tcp-txt">Disconnected</span> (Port 5000)</div>
+            <div class="status-item"><span class="dot" id="footer-udp-dot">●</span> UDP: <span id="footer-udp-txt">Disconnected</span> (Port 6000)</div>
+            <div class="status-item ms-auto">HYBRID TRANSFER v1.0.0 | Computer Networks Socket Project</div>
+        </footer>
+
+        <!-- Connection Modal Landing Screen -->
+        <div class="modal-overlay" id="connect-modal">
+            <div class="modal-box">
+                <div class="modal-header">
+                    <div class="logo-icon-lg">↕</div>
+                    <h2>HYBRID TRANSFER</h2>
+                    <p>Fast File Transfer. Real-Time Communication. One Network.</p>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label>Server IP Address</label>
+                        <input type="text" id="modal-host" value="127.0.0.1" placeholder="e.g. 127.0.0.1 or 192.168.1.10">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>TCP Port</label>
+                            <input type="number" id="modal-tcp-port" value="5000">
+                        </div>
+                        <div class="form-group">
+                            <label>UDP Port</label>
+                            <input type="number" id="modal-udp-port" value="6000">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Username</label>
+                        <input type="text" id="modal-username" value="Keerthi">
+                    </div>
+                    <div class="modal-error" id="modal-error-msg" style="display: none;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" onclick="closeConnectModal()">Cancel</button>
+                    <button class="btn btn-primary btn-lg" id="modal-connect-btn" onclick="performConnection()">CONNECT TO SERVER</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
