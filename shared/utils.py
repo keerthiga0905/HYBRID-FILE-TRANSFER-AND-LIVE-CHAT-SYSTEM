@@ -31,28 +31,29 @@ def get_timestamp() -> str:
 
 def print_success(msg: str) -> None:
     try:
-        print(f"{TermColor.GREEN}[OK {get_timestamp()}]{TermColor.RESET} {msg}")
+        print(f"{TermColor.GREEN}[OK {get_timestamp()}]{TermColor.RESET} {msg}", flush=True)
     except Exception:
-        print(f"[OK {get_timestamp()}] {msg}")
+        print(f"[OK {get_timestamp()}] {msg}", flush=True)
 
 
 def print_error(msg: str) -> None:
     try:
-        print(f"{TermColor.RED}[ERROR {get_timestamp()}]{TermColor.RESET} {msg}")
+        print(f"{TermColor.RED}[ERROR {get_timestamp()}]{TermColor.RESET} {msg}", flush=True)
     except Exception:
-        print(f"[ERROR {get_timestamp()}] {msg}")
+        print(f"[ERROR {get_timestamp()}] {msg}", flush=True)
 
 
 def print_info(msg: str, tag: str = "INFO") -> None:
     try:
-        print(f"{TermColor.CYAN}[{tag} {get_timestamp()}]{TermColor.RESET} {msg}")
+        print(f"{TermColor.CYAN}[{tag} {get_timestamp()}]{TermColor.RESET} {msg}", flush=True)
     except Exception:
-        print(f"[{tag} {get_timestamp()}] {msg}")
+        print(f"[{tag} {get_timestamp()}] {msg}", flush=True)
 
 
 def print_warning(msg: str) -> None:
     try:
-        print(f"{TermColor.YELLOW}[WARN {get_timestamp()}]{TermColor.RESET} {msg}")
+        print(f"{TermColor.YELLOW}[WARN {get_timestamp()}]{TermColor.RESET} {msg}", flush=True)
     except Exception:
-        print(f"[WARN {get_timestamp()}] {msg}")
+        print(f"[WARN {get_timestamp()}] {msg}", flush=True)
+
 

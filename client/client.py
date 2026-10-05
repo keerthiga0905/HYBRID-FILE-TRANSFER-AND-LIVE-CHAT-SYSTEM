@@ -4,10 +4,16 @@ Interactive terminal application for connecting to the TCP Server.
 """
 
 import sys
+from pathlib import Path
+
+# Add project root directory to python path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import time
 from shared.config import DEFAULT_HOST, TCP_PORT
 from shared.utils import TermColor, print_info, print_success, print_error, print_warning
 from client.tcp_client import TCPClient
+
 
 
 def print_banner() -> None:

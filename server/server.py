@@ -4,10 +4,16 @@ Launches TCP File Transfer Server.
 """
 
 import sys
+from pathlib import Path
+
+# Add project root directory to python path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import time
 from shared.config import TCP_PORT, DEFAULT_HOST
 from server.tcp_server import TCPServer
 from server.logger import log_event
+
 
 
 def print_banner() -> None:
@@ -21,7 +27,8 @@ Server Status   : RUNNING
 
 Waiting for TCP clients...
 """
-    print(banner)
+    print(banner, flush=True)
+
 
 
 def main() -> None:
