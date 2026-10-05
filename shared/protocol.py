@@ -1,66 +1,70 @@
 """
-Application-level framing protocol for TCP and UDP messages.
-Handles string message encoding/decoding and line-delimited message framing over stream sockets.
+Shared Protocol Module - Message framing and JSON protocol definitions for TCP/UDP socket communication.
+Uses 4-byte network byte-order integer length prefix + JSON bytes payload.
+Format: [4-byte Big-Endian Length Header][JSON Payload Bytes]
 """
 
+import json
 import socket
-from shared.config import HEADER_DELIMITER, MSG_END_MARKER
+import struct
+from typing import Any, Dict, Optional
+
+# Security limit for maximum control message size (16 MB) to prevent OOM DOS attacks
+MAX_CONTROL_MSG_SIZE = 16 * 1024 * 1024  # 16 MB
 
 
-class ProtocolMessage:
+def recv_exact(sock: socket.socket, num_bytes: int) -> Optional[bytes]:
     """
-    Represents an application-layer control message.
-    Format: COMMAND|ARG1|ARG2...
+    Helper function to reliably read exactly `num_bytes` from a TCP stream socket.
+    Handles partial recv() calls across TCP buffer segments.
+    Returns bytes or None if the socket was closed before completing read.
     """
-
-    def __init__(self, command: str, *args: str):
-        self.command = command.upper().strip()
-        self.args = [str(a).strip() for a in args]
-
-    def encode(self) -> bytes:
-        """Encodes message to UTF-8 bytes with end marker."""
-        parts = [self.command] + self.args
-        raw_str = HEADER_DELIMITER.join(parts) + MSG_END_MARKER
-        return raw_str.encode("utf-8")
-
-    @classmethod
-    def decode(cls, raw_data: str) -> "ProtocolMessage":
-        """Decodes raw string message into a ProtocolMessage instance."""
-        clean_str = raw_data.rstrip("\r\n")
-        if not clean_str:
-            return cls("INVALID")
-        parts = clean_str.split(HEADER_DELIMITER)
-        return cls(parts[0], *parts[1:])
-
-    def __repr__(self) -> str:
-        return f"<ProtocolMessage cmd={self.command} args={self.args}>"
-
-
-def send_framed_msg(sock: socket.socket, msg: ProtocolMessage) -> None:
-    """
-    Sends a complete framed control message over a TCP stream socket.
-    """
-    sock.sendall(msg.encode())
-
-
-def receive_framed_msg(sock: socket.socket, buffer: str = "") -> tuple[ProtocolMessage | None, str]:
-    """
-    Reads from TCP socket until a full line delimiter '\\n' is found.
-    Returns (ProtocolMessage, remaining_buffer).
-    Handles socket recv streaming fragmentation.
-    """
-    current_buf = buffer
-    while MSG_END_MARKER not in current_buf:
+    buf = bytearray()
+    while len(buf) < num_bytes:
         try:
-            chunk = sock.recv(1024)
+            chunk = sock.recv(num_bytes - len(buf))
             if not chunk:
-                # Socket connection closed by remote peer
-                if current_buf.strip():
-                    return ProtocolMessage.decode(current_buf), ""
-                return None, ""
-            current_buf += chunk.decode("utf-8", errors="replace")
-        except socket.error as e:
-            raise e
+                # Connection closed by remote endpoint
+                return None
+            buf.extend(chunk)
+        except (socket.error, ConnectionError):
+            return None
+    return bytes(buf)
 
-    line, remaining = current_buf.split(MSG_END_MARKER, 1)
-    return ProtocolMessage.decode(line), remaining
+
+def send_message(sock: socket.socket, data: Dict[str, Any]) -> None:
+    """
+    Encodes a Python dictionary to JSON, prepends a 4-byte network-order length header,
+    and sends the complete framed packet over the TCP socket.
+    """
+    json_bytes = json.dumps(data).encode("utf-8")
+    payload_len = len(json_bytes)
+    header = struct.pack(">I", payload_len)
+    sock.sendall(header + json_bytes)
+
+
+def receive_message(sock: socket.socket) -> Optional[Dict[str, Any]]:
+    """
+    Reads a 4-byte length prefix from TCP socket, then reads exactly payload_len bytes.
+    Decodes the JSON data payload into a Python dictionary.
+    Returns None if socket is disconnected or message is invalid.
+    """
+    header = recv_exact(sock, 4)
+    if not header:
+        return None
+
+    # Unpack 4-byte big-endian unsigned int
+    (payload_len,) = struct.unpack(">I", header)
+
+    if payload_len > MAX_CONTROL_MSG_SIZE:
+        raise ValueError(f"Control message length ({payload_len} bytes) exceeds limit ({MAX_CONTROL_MSG_SIZE} bytes)")
+
+    payload_bytes = recv_exact(sock, payload_len)
+    if payload_bytes is None:
+        return None
+
+    try:
+        decoded_str = payload_bytes.decode("utf-8")
+        return json.loads(decoded_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON payload: {e}")

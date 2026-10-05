@@ -1,12 +1,12 @@
 """
 TCP Server Module - Handles reliable connection-oriented communication.
-Used for TCP File Transfer. Multithreaded client handler.
+Multithreaded client handler using framed JSON messages over TCP stream sockets.
 """
 
 import socket
 import threading
 from shared.config import DEFAULT_HOST, TCP_PORT
-from shared.protocol import receive_framed_msg, send_framed_msg, ProtocolMessage
+from shared.protocol import receive_message, send_message
 from shared.utils import print_info, print_success, print_error
 from server.logger import log_event
 
@@ -22,26 +22,23 @@ class TCPServer:
         self.port = port
         self.server_socket: socket.socket | None = None
         self.is_running = False
-        self.active_clients = set()
+        self.active_clients = {}
         self._lock = threading.Lock()
 
     def start(self) -> None:
         """
         Initializes TCP socket, binds to address, listens, and runs accept loop.
         """
-        # Create TCP IPv4 stream socket
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # Allow reuse of local socket address (solves 'Address already in use' error on restart)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         try:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(5)
             self.is_running = True
-            log_event(f"TCP File Server started on {self.host}:{self.port}")
+            log_event(f"TCP File Server listening on {self.host}:{self.port}")
             print_success(f"TCP File Server listening on {self.host}:{self.port}")
 
-            # Accept connection loop running in dedicated thread or main thread
             accept_thread = threading.Thread(target=self._accept_loop, daemon=True, name="TCPAcceptLoop")
             accept_thread.start()
 
@@ -55,13 +52,13 @@ class TCPServer:
         while self.is_running:
             try:
                 client_sock, client_addr = self.server_socket.accept()
+                addr_str = f"{client_addr[0]}:{client_addr[1]}"
                 with self._lock:
-                    self.active_clients.add(client_addr)
+                    self.active_clients[addr_str] = client_sock
 
-                print_info(f"New TCP client connected from {client_addr[0]}:{client_addr[1]}", tag="TCP")
-                log_event(f"TCP Client connected: {client_addr}")
+                print_info(f"Client connected: {addr_str}", tag="TCP")
+                log_event(f"TCP Client connected: {addr_str}")
 
-                # Spawn a new thread for each client connection
                 client_thread = threading.Thread(
                     target=self._handle_client,
                     args=(client_sock, client_addr),
@@ -72,42 +69,79 @@ class TCPServer:
 
             except socket.error:
                 if not self.is_running:
-                    break  # Server stopped intentionally
+                    break
 
     def _handle_client(self, client_sock: socket.socket, client_addr: tuple[str, int]) -> None:
         """
         Handles communication lifecycle for a single TCP client.
         Executed inside a separate thread per client.
         """
-        buffer = ""
+        addr_str = f"{client_addr[0]}:{client_addr[1]}"
         try:
             while self.is_running:
-                msg, buffer = receive_framed_msg(client_sock, buffer)
+                try:
+                    msg = receive_message(client_sock)
+                except ValueError as ve:
+                    # Malformed client message handling without server crash
+                    print_error(f"Received malformed payload from {addr_str}: {ve}")
+                    log_event(f"Malformed payload from {addr_str}: {ve}", "warning")
+                    err_response = {
+                        "status": "ERROR",
+                        "message": f"Malformed payload: {ve}"
+                    }
+                    try:
+                        send_message(client_sock, err_response)
+                    except Exception:
+                        pass
+                    continue
+
                 if msg is None:
-                    # Connection closed by client
+                    # Client disconnected cleanly
                     break
 
-                # Phase 1 Command Handling: PING / QUIT
-                if msg.command == "PING":
-                    response = ProtocolMessage("PONG", "Server Ready", f"Clients Connected: {len(self.active_clients)}")
-                    send_framed_msg(client_sock, response)
-                    log_event(f"Handled PING from {client_addr}")
-                elif msg.command == "QUIT":
-                    response = ProtocolMessage("GOODBYE", "Connection closing")
-                    send_framed_msg(client_sock, response)
+                cmd = msg.get("command", "").upper()
+
+                if cmd == "HELLO":
+                    client_name = msg.get("client_name", "UnknownClient")
+                    print_info("HELLO received", tag="TCP")
+                    log_event(f"HELLO received from {client_name} ({addr_str})")
+
+                    response = {
+                        "status": "SUCCESS",
+                        "command": "HELLO_ACK",
+                        "message": "Connection is working",
+                        "client_id": addr_str,
+                        "server_status": "RUNNING"
+                    }
+                    send_message(client_sock, response)
+                    print_info("HELLO response sent", tag="TCP")
+                    log_event(f"HELLO response sent to {addr_str}")
+
+                elif cmd == "QUIT":
+                    response = {"status": "SUCCESS", "message": "Goodbye"}
+                    send_message(client_sock, response)
                     break
+
                 else:
-                    response = ProtocolMessage("ACK", f"Received command: {msg.command}")
-                    send_framed_msg(client_sock, response)
+                    response = {
+                        "status": "ACK",
+                        "message": f"Received command '{cmd}'"
+                    }
+                    send_message(client_sock, response)
 
+        except (socket.error, ConnectionResetError) as e:
+            log_event(f"TCP Client {addr_str} connection reset: {e}", "info")
         except Exception as e:
-            log_event(f"Error handling TCP client {client_addr}: {e}", "error")
+            log_event(f"Error handling TCP client {addr_str}: {e}", "error")
         finally:
-            client_sock.close()
+            try:
+                client_sock.close()
+            except Exception:
+                pass
             with self._lock:
-                self.active_clients.discard(client_addr)
-            print_info(f"TCP client disconnected from {client_addr[0]}:{client_addr[1]}", tag="TCP")
-            log_event(f"TCP Client disconnected: {client_addr}")
+                self.active_clients.pop(addr_str, None)
+            print_info(f"Client disconnected: {addr_str}", tag="TCP")
+            log_event(f"TCP Client disconnected: {addr_str}")
 
     def stop(self) -> None:
         """Stops the TCP server and closes server socket."""

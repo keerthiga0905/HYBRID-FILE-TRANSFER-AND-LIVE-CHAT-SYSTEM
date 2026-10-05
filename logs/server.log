@@ -4,3 +4,26 @@
 [22:23:07] [TCPClientHandler-53223] INFO: Handled PING from ('127.0.0.1', 53223)
 [22:23:07] [TCPClientHandler-53223] INFO: TCP Client disconnected: ('127.0.0.1', 53223)
 [22:23:07] [MainThread] INFO: TCP Server stopped
+[22:33:03] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[22:33:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:50130
+[22:33:03] [TCPClientHandler-50130] INFO: HELLO received from ClientA (127.0.0.1:50130)
+[22:33:03] [TCPClientHandler-50130] INFO: HELLO response sent to 127.0.0.1:50130
+[22:33:03] [TCPClientHandler-50130] INFO: TCP Client disconnected: 127.0.0.1:50130
+[22:33:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:50131
+[22:33:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:50132
+[22:33:03] [TCPClientHandler-50131] INFO: HELLO received from ClientA (127.0.0.1:50131)
+[22:33:03] [TCPClientHandler-50131] INFO: HELLO response sent to 127.0.0.1:50131
+[22:33:03] [TCPClientHandler-50132] INFO: HELLO received from ClientB (127.0.0.1:50132)
+[22:33:03] [TCPClientHandler-50132] INFO: HELLO response sent to 127.0.0.1:50132
+[22:33:03] [TCPClientHandler-50131] INFO: TCP Client disconnected: 127.0.0.1:50131
+[22:33:03] [TCPClientHandler-50132] INFO: HELLO received from ClientB_Repeat (127.0.0.1:50132)
+[22:33:03] [TCPClientHandler-50132] INFO: HELLO response sent to 127.0.0.1:50132
+[22:33:03] [TCPClientHandler-50132] INFO: TCP Client disconnected: 127.0.0.1:50132
+[22:33:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:50133
+[22:33:03] [TCPClientHandler-50133] WARNING: Malformed payload from 127.0.0.1:50133: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[22:33:03] [TCPClientHandler-50133] INFO: TCP Client disconnected: 127.0.0.1:50133
+[22:33:03] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:50134
+[22:33:03] [TCPClientHandler-50134] INFO: HELLO received from PostErrorCheck (127.0.0.1:50134)
+[22:33:03] [TCPClientHandler-50134] INFO: HELLO response sent to 127.0.0.1:50134
+[22:33:03] [TCPClientHandler-50134] INFO: TCP Client disconnected: 127.0.0.1:50134
+[22:33:03] [MainThread] INFO: TCP Server stopped

@@ -4,8 +4,9 @@ and TCP stream socket communication with the Server.
 """
 
 import socket
+from typing import Dict, Any, Optional
 from shared.config import DEFAULT_HOST, TCP_PORT
-from shared.protocol import ProtocolMessage, send_framed_msg, receive_framed_msg
+from shared.protocol import send_message, receive_message
 from shared.utils import print_success, print_error, print_info
 
 
@@ -19,19 +20,18 @@ class TCPClient:
         self.port = port
         self.sock: socket.socket | None = None
         self.is_connected = False
-        self._buffer = ""
 
     def connect(self) -> bool:
         """
-        Creates AF_INET SOCK_STREAM socket and initiates TCP 3-way handshake with server.
+        Creates AF_INET SOCK_STREAM IPv4 TCP socket and initiates 3-way handshake with server.
         """
         try:
             self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.sock.settimeout(5.0)  # 5 second timeout for connection
+            self.sock.settimeout(5.0)
             self.sock.connect((self.host, self.port))
-            self.sock.settimeout(None)  # Reset blocking mode
+            self.sock.settimeout(None)  # Reset to blocking mode
             self.is_connected = True
-            print_success(f"Connected to TCP Server at {self.host}:{self.port}")
+            print_success("TCP CONNECTION ESTABLISHED")
             return True
         except (socket.error, ConnectionRefusedError) as e:
             print_error(f"Could not connect to TCP Server at {self.host}:{self.port} - {e}")
@@ -39,22 +39,27 @@ class TCPClient:
             self.sock = None
             return False
 
-    def ping(self) -> ProtocolMessage | None:
-        """Sends PING control message and waits for PONG response."""
+    def send_hello(self, client_name: str = "Client") -> Optional[Dict[str, Any]]:
+        """Sends HELLO command JSON message to server and receives framed response."""
         if not self.is_connected or not self.sock:
             print_error("TCP Client is not connected!")
             return None
 
-        try:
-            ping_msg = ProtocolMessage("PING")
-            send_framed_msg(self.sock, ping_msg)
-            print_info("Sent TCP PING header to server...", tag="TCP")
+        hello_request = {
+            "command": "HELLO",
+            "client_name": client_name
+        }
 
-            resp, self._buffer = receive_framed_msg(self.sock, self._buffer)
+        try:
+            send_message(self.sock, hello_request)
+            resp = receive_message(self.sock)
             if resp:
-                print_success(f"Received from Server: {resp.command} {' '.join(resp.args)}")
+                print_info("Server response:", tag="Server")
+                if resp.get("status") == "SUCCESS":
+                    print_success(f"HELLO received")
+                    print_success(f"{resp.get('message', 'Connection is working')}")
             return resp
-        except socket.error as e:
+        except (socket.error, ValueError) as e:
             print_error(f"TCP communication error: {e}")
             self.disconnect()
             return None
@@ -63,8 +68,8 @@ class TCPClient:
         """Closes TCP connection gracefully."""
         if self.sock and self.is_connected:
             try:
-                quit_msg = ProtocolMessage("QUIT")
-                send_framed_msg(self.sock, quit_msg)
+                quit_request = {"command": "QUIT"}
+                send_message(self.sock, quit_request)
                 self.sock.close()
             except Exception:
                 pass
