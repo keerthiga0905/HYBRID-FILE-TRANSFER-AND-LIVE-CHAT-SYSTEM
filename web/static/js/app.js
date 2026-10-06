@@ -1,6 +1,7 @@
 /* 
    HYBRID TRANSFER - Product UI Controller Script
-   Handles Navigation, Connection Management, API Interactivity, and Real-time Backend Sync
+   Handles Navigation, Connection Management, API Interactivity, Real-time Backend Sync,
+   File Listing, TCP Upload, TCP Download, and Transfer History.
 */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -19,7 +20,6 @@ function initApp() {
 function switchTab(tabId) {
     currentTab = tabId;
     
-    // Update Sidebar button active state
     document.querySelectorAll('.nav-item').forEach(btn => {
         btn.classList.remove('active');
     });
@@ -29,7 +29,6 @@ function switchTab(tabId) {
         activeNavBtn.classList.add('active');
     }
 
-    // Update Page View visibility
     document.querySelectorAll('.page-view').forEach(page => {
         page.classList.remove('active');
     });
@@ -39,7 +38,11 @@ function switchTab(tabId) {
         activePage.classList.add('active');
     }
 
-    if (tabId === 'activity') {
+    if (tabId === 'files') {
+        fetchFilesList();
+    } else if (tabId === 'transfers') {
+        fetchTransfers();
+    } else if (tabId === 'activity') {
         fetchLogs();
     }
 }
@@ -47,18 +50,14 @@ function switchTab(tabId) {
 // Modal control
 function toggleConnectModal() {
     const modal = document.getElementById('connect-modal');
-    if (modal.style.display === 'flex') {
-        modal.style.display = 'none';
-    } else {
-        modal.style.display = 'flex';
-    }
+    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
 }
 
 function closeConnectModal() {
     document.getElementById('connect-modal').style.display = 'none';
 }
 
-// Perform Connection via Python Backend API
+// Connection Handler
 async function performConnection() {
     const host = document.getElementById('modal-host').value.trim() || '127.0.0.1';
     const tcpPort = parseInt(document.getElementById('modal-tcp-port').value) || 5000;
@@ -89,6 +88,7 @@ async function performConnection() {
         if (data.success) {
             closeConnectModal();
             updateUIState(data);
+            fetchFilesList();
             fetchLogs();
         } else {
             errBox.textContent = data.error || 'Connection failed';
@@ -103,7 +103,7 @@ async function performConnection() {
     }
 }
 
-// Status Sync with Real Python Backend
+// Status Sync
 async function checkBackendStatus() {
     try {
         const response = await fetch('/api/status');
@@ -123,7 +123,6 @@ function updateUIState(status) {
     if (userName) userName.textContent = status.username || 'Keerthi';
     if (userGreeting) userGreeting.textContent = status.username || 'Keerthi';
 
-    // TCP Pill & Dashboard Status
     const tcpPill = document.getElementById('pill-tcp');
     const dashTcpVal = document.getElementById('dash-tcp-val');
     const footerTcpTxt = document.getElementById('footer-tcp-txt');
@@ -151,6 +150,142 @@ function updateUIState(status) {
         }
         if (footerTcpTxt) footerTcpTxt.textContent = 'Disconnected';
         if (footerTcpDot) footerTcpDot.className = 'dot offline';
+    }
+}
+
+// Files & Transfer Operations
+async function fetchFilesList() {
+    try {
+        const res = await fetch('/api/files');
+        const data = await res.json();
+        const tbody = document.getElementById('files-table-body');
+        const dashFilesVal = document.getElementById('dash-files-val');
+
+        if (tbody && data.files) {
+            tbody.innerHTML = '';
+            if (dashFilesVal) dashFilesVal.textContent = data.files.length;
+
+            if (data.files.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">No files available on server repository. Click "+ Upload File" to add files.</td></tr>`;
+                return;
+            }
+
+            data.files.forEach(file => {
+                const tr = document.createElement('tr');
+                const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+                tr.innerHTML = `
+                    <td><strong>${file.filename}</strong></td>
+                    <td>${sizeMB} MB (${file.size.toLocaleString()} B)</td>
+                    <td>${file.filename.split('.').pop().toUpperCase()} File</td>
+                    <td><span class="tag tag-success">Available</span></td>
+                    <td><button class="btn btn-sm btn-action" onclick="performDownload('${file.filename}')">↓ Download</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    } catch (e) {
+        console.warn('Fetch files error:', e);
+    }
+}
+
+function showUploadModal() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (e) => {
+        if (e.target.files.length > 0) {
+            performUpload(e.target.files[0]);
+        }
+    };
+    input.click();
+}
+
+async function performUpload(fileObj) {
+    const formData = new FormData();
+    formData.append('file', fileObj);
+
+    alert(`Initiating TCP streaming upload for '${fileObj.name}' (${(fileObj.size / (1024*1024)).toFixed(2)} MB)...`);
+
+    try {
+        const res = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            alert(`✓ SUCCESS!\nFile '${data.filename}' uploaded successfully.\nSHA-256 Checksum: VERIFIED\nServer Hash: ${data.server_checksum.substring(0, 16)}...`);
+            fetchFilesList();
+            fetchLogs();
+        } else {
+            alert(`✗ UPLOAD FAILED!\nError: ${data.error}`);
+        }
+    } catch (err) {
+        alert('Upload Error: ' + err.message);
+    }
+}
+
+async function performDownload(filename) {
+    alert(`Initiating TCP streaming download for '${filename}'...`);
+
+    try {
+        const res = await fetch('/api/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename })
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            alert(`✓ SUCCESS!\nFile '${data.filename}' downloaded into storage/downloads/.\nSHA-256 Checksum: VERIFIED`);
+            fetchTransfers();
+            fetchLogs();
+        } else {
+            alert(`✗ DOWNLOAD FAILED!\nError: ${data.error}`);
+        }
+    } catch (err) {
+        alert('Download Error: ' + err.message);
+    }
+}
+
+async function fetchTransfers() {
+    try {
+        const res = await fetch('/api/transfers');
+        const data = await res.json();
+        const container = document.getElementById('transfers-list-container');
+
+        if (container && data.transfers) {
+            if (data.transfers.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <p>No active file transfers currently running.</p>
+                        <button class="btn btn-primary" onclick="switchTab('files')">Start a File Transfer</button>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            data.transfers.forEach(t => {
+                const sizeMB = (t.size / (1024 * 1024)).toFixed(2);
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.style.marginBottom = '12px';
+                card.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <strong>${t.filename}</strong> (${sizeMB} MB)
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">${t.direction} over ${t.protocol} Protocol | ${t.timestamp}</div>
+                        </div>
+                        <div>
+                            <span class="tag ${t.status === 'Completed' ? 'tag-success' : 'tag-error'}">${t.status}</span>
+                            <span style="font-size: 12px; color: var(--success-green); margin-left: 8px;">✓ SHA-256 Verified</span>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+    } catch (e) {
+        console.warn('Fetch transfers error:', e);
     }
 }
 

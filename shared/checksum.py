@@ -4,6 +4,7 @@ Demonstrates error detection in Computer Networks.
 """
 
 import hashlib
+import hmac
 from pathlib import Path
 
 
@@ -36,4 +37,5 @@ def verify_checksum(hash1: str, hash2: str) -> bool:
     """
     if not hash1 or not hash2:
         return False
-    return hashlib.compare_digest(hash1.lower().strip(), hash2.lower().strip())
+    return hmac.compare_digest(hash1.lower().strip(), hash2.lower().strip())
+

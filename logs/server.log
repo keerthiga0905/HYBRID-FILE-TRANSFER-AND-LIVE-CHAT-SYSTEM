@@ -88,3 +88,135 @@
 [22:55:08] [TCPClientHandler-55859] INFO: HELLO received from PostErrorCheck (127.0.0.1:55859)
 [22:55:08] [TCPClientHandler-55859] INFO: HELLO response sent to 127.0.0.1:55859
 [22:55:08] [MainThread] INFO: TCP Server stopped
+[22:56:15] [TCPClientHandler-51321] INFO: TCP Client disconnected: 127.0.0.1:51321
+[22:56:23] [MainThread] INFO: Starting Hybrid Server...
+[22:56:23] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5000
+[22:56:48] [TCPClientHandler-63737] INFO: TCP Client disconnected: 127.0.0.1:63737
+[22:56:48] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:56437
+[22:56:48] [TCPClientHandler-56437] INFO: HELLO received from Keerthi (127.0.0.1:56437)
+[22:56:48] [TCPClientHandler-56437] INFO: HELLO response sent to 127.0.0.1:56437
+[11:18:00] [MainThread] INFO: Starting Hybrid Server...
+[11:18:00] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5000
+[11:18:25] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64811
+[11:18:25] [TCPClientHandler-64811] INFO: HELLO received from Keerthi (127.0.0.1:64811)
+[11:18:25] [TCPClientHandler-64811] INFO: HELLO response sent to 127.0.0.1:64811
+[11:23:51] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:23:51] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57933
+[11:23:51] [TCPClientHandler-57933] INFO: HELLO received from Uploader (127.0.0.1:57933)
+[11:23:51] [TCPClientHandler-57933] INFO: Upload initiated from 127.0.0.1:57933: sample_test_1mb.dat, 1048576 bytes
+[11:23:51] [TCPClientHandler-57933] ERROR: Error handling TCP client 127.0.0.1:57933: module 'hashlib' has no attribute 'compare_digest'
+[11:23:51] [TCPClientHandler-57933] INFO: TCP Client disconnected: 127.0.0.1:57933
+[11:23:51] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57934
+[11:23:51] [TCPClientHandler-57934] INFO: HELLO received from Lister (127.0.0.1:57934)
+[11:23:51] [TCPClientHandler-57934] INFO: File list sent to 127.0.0.1:57934: 0 files
+[11:23:51] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57935
+[11:23:51] [TCPClientHandler-57935] INFO: HELLO received from Downloader (127.0.0.1:57935)
+[11:23:51] [TCPClientHandler-57935] INFO: Download requested from 127.0.0.1:57935: sample_test_1mb.dat
+[11:23:51] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57936
+[11:23:51] [TCPClientHandler-57936] INFO: Download requested from 127.0.0.1:57936: secret.txt
+[11:23:51] [MainThread] INFO: TCP Server stopped
+[11:23:51] [TCPClientHandler-57936] INFO: TCP Client disconnected: 127.0.0.1:57936
+[11:23:51] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:23:52] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57943
+[11:23:52] [TCPClientHandler-57943] INFO: HELLO received from ClientA (127.0.0.1:57943)
+[11:23:52] [TCPClientHandler-57943] INFO: TCP Client disconnected: 127.0.0.1:57943
+[11:23:52] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57944
+[11:23:52] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57945
+[11:23:52] [TCPClientHandler-57944] INFO: HELLO received from ClientA (127.0.0.1:57944)
+[11:23:52] [TCPClientHandler-57945] INFO: HELLO received from ClientB (127.0.0.1:57945)
+[11:23:52] [TCPClientHandler-57944] INFO: TCP Client disconnected: 127.0.0.1:57944
+[11:23:52] [TCPClientHandler-57945] INFO: HELLO received from ClientB_Repeat (127.0.0.1:57945)
+[11:23:52] [TCPClientHandler-57945] INFO: TCP Client disconnected: 127.0.0.1:57945
+[11:23:52] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57946
+[11:23:52] [TCPClientHandler-57946] WARNING: Malformed payload from 127.0.0.1:57946: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:23:52] [TCPClientHandler-57946] INFO: TCP Client disconnected: 127.0.0.1:57946
+[11:23:52] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57947
+[11:23:52] [TCPClientHandler-57947] INFO: HELLO received from PostErrorCheck (127.0.0.1:57947)
+[11:23:52] [MainThread] INFO: TCP Server stopped
+[11:25:57] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64643
+[11:25:57] [TCPClientHandler-64643] INFO: HELLO received from Uploader (127.0.0.1:64643)
+[11:25:57] [TCPClientHandler-64643] INFO: Upload initiated from 127.0.0.1:64643: sample_test_1mb.dat, 1048576 bytes
+[11:25:57] [TCPClientHandler-64643] ERROR: Error handling TCP client 127.0.0.1:64643: module 'hashlib' has no attribute 'compare_digest'
+[11:25:57] [TCPClientHandler-64643] INFO: TCP Client disconnected: 127.0.0.1:64643
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64644
+[11:25:57] [TCPClientHandler-64644] INFO: HELLO received from Lister (127.0.0.1:64644)
+[11:25:57] [TCPClientHandler-64644] INFO: File list sent to 127.0.0.1:64644: 0 files
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64645
+[11:25:57] [TCPClientHandler-64645] INFO: HELLO received from Downloader (127.0.0.1:64645)
+[11:25:57] [TCPClientHandler-64645] INFO: Download requested from 127.0.0.1:64645: sample_test_1mb.dat
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64646
+[11:25:57] [TCPClientHandler-64646] INFO: Download requested from 127.0.0.1:64646: secret.txt
+[11:25:57] [MainThread] INFO: TCP Server stopped
+[11:25:57] [TCPClientHandler-64646] INFO: TCP Client disconnected: 127.0.0.1:64646
+[11:25:57] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64653
+[11:25:57] [TCPClientHandler-64653] INFO: HELLO received from ClientA (127.0.0.1:64653)
+[11:25:57] [TCPClientHandler-64653] INFO: TCP Client disconnected: 127.0.0.1:64653
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64654
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64655
+[11:25:57] [TCPClientHandler-64654] INFO: HELLO received from ClientA (127.0.0.1:64654)
+[11:25:57] [TCPClientHandler-64655] INFO: HELLO received from ClientB (127.0.0.1:64655)
+[11:25:57] [TCPClientHandler-64654] INFO: TCP Client disconnected: 127.0.0.1:64654
+[11:25:57] [TCPClientHandler-64655] INFO: HELLO received from ClientB_Repeat (127.0.0.1:64655)
+[11:25:57] [TCPClientHandler-64655] INFO: TCP Client disconnected: 127.0.0.1:64655
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64656
+[11:25:57] [TCPClientHandler-64656] WARNING: Malformed payload from 127.0.0.1:64656: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:25:57] [TCPClientHandler-64656] INFO: TCP Client disconnected: 127.0.0.1:64656
+[11:25:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:64657
+[11:25:57] [TCPClientHandler-64657] INFO: HELLO received from PostErrorCheck (127.0.0.1:64657)
+[11:25:57] [MainThread] INFO: TCP Server stopped
+[11:25:57] [TCPClientHandler-64657] INFO: TCP Client disconnected: 127.0.0.1:64657
+[11:27:46] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:27:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:49672
+[11:27:47] [TCPClientHandler-49672] INFO: HELLO received from Uploader (127.0.0.1:49672)
+[11:27:47] [TCPClientHandler-49672] INFO: Upload initiated from 127.0.0.1:49672: sample_test_1mb.dat, 1048576 bytes
+[11:27:47] [TCPClientHandler-49672] ERROR: Error handling TCP client 127.0.0.1:49672: module 'hashlib' has no attribute 'compare_digest'
+[11:27:47] [TCPClientHandler-49672] INFO: TCP Client disconnected: 127.0.0.1:49672
+[11:27:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:49677
+[11:27:47] [TCPClientHandler-49677] INFO: HELLO received from Lister (127.0.0.1:49677)
+[11:27:47] [TCPClientHandler-49677] INFO: File list sent to 127.0.0.1:49677: 0 files
+[11:27:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:49678
+[11:27:47] [TCPClientHandler-49678] INFO: HELLO received from Downloader (127.0.0.1:49678)
+[11:27:47] [TCPClientHandler-49678] INFO: Download requested from 127.0.0.1:49678: sample_test_1mb.dat
+[11:27:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:49679
+[11:27:47] [TCPClientHandler-49679] INFO: Download requested from 127.0.0.1:49679: secret.txt
+[11:27:47] [TCPClientHandler-49679] INFO: TCP Client disconnected: 127.0.0.1:49679
+[11:27:47] [MainThread] INFO: TCP Server stopped
+[11:28:19] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:28:19] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53222
+[11:28:19] [TCPClientHandler-53222] INFO: HELLO received from Uploader (127.0.0.1:53222)
+[11:28:19] [TCPClientHandler-53222] INFO: Upload initiated from 127.0.0.1:53222: sample_test_1mb.dat, 1048576 bytes
+[11:28:19] [TCPClientHandler-53222] INFO: Upload completed successfully: sample_test_1mb.dat
+[11:28:19] [TCPClientHandler-53222] INFO: TCP Client disconnected: 127.0.0.1:53222
+[11:28:19] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53223
+[11:28:19] [TCPClientHandler-53223] INFO: HELLO received from Lister (127.0.0.1:53223)
+[11:28:19] [TCPClientHandler-53223] INFO: File list sent to 127.0.0.1:53223: 1 files
+[11:28:19] [TCPClientHandler-53223] INFO: TCP Client disconnected: 127.0.0.1:53223
+[11:28:19] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53224
+[11:28:19] [TCPClientHandler-53224] INFO: HELLO received from Downloader (127.0.0.1:53224)
+[11:28:19] [TCPClientHandler-53224] INFO: Download requested from 127.0.0.1:53224: sample_test_1mb.dat
+[11:28:19] [TCPClientHandler-53224] INFO: Download completed for 127.0.0.1:53224: sample_test_1mb.dat
+[11:28:19] [TCPClientHandler-53224] INFO: TCP Client disconnected: 127.0.0.1:53224
+[11:28:19] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53225
+[11:28:19] [TCPClientHandler-53225] INFO: Download requested from 127.0.0.1:53225: secret.txt
+[11:28:19] [MainThread] INFO: TCP Server stopped
+[11:28:19] [TCPClientHandler-53225] INFO: TCP Client disconnected: 127.0.0.1:53225
+[11:28:19] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:28:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53232
+[11:28:20] [TCPClientHandler-53232] INFO: HELLO received from ClientA (127.0.0.1:53232)
+[11:28:20] [TCPClientHandler-53232] INFO: TCP Client disconnected: 127.0.0.1:53232
+[11:28:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53233
+[11:28:20] [TCPClientHandler-53233] INFO: HELLO received from ClientA (127.0.0.1:53233)
+[11:28:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53234
+[11:28:20] [TCPClientHandler-53234] INFO: HELLO received from ClientB (127.0.0.1:53234)
+[11:28:20] [TCPClientHandler-53233] INFO: TCP Client disconnected: 127.0.0.1:53233
+[11:28:20] [TCPClientHandler-53234] INFO: HELLO received from ClientB_Repeat (127.0.0.1:53234)
+[11:28:20] [TCPClientHandler-53234] INFO: TCP Client disconnected: 127.0.0.1:53234
+[11:28:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53235
+[11:28:20] [TCPClientHandler-53235] WARNING: Malformed payload from 127.0.0.1:53235: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:28:20] [TCPClientHandler-53235] INFO: TCP Client disconnected: 127.0.0.1:53235
+[11:28:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:53236
+[11:28:20] [TCPClientHandler-53236] INFO: HELLO received from PostErrorCheck (127.0.0.1:53236)
+[11:28:20] [TCPClientHandler-53236] INFO: TCP Client disconnected: 127.0.0.1:53236
+[11:28:20] [MainThread] INFO: TCP Server stopped

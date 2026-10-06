@@ -7,13 +7,12 @@ import os
 import sys
 from pathlib import Path
 
-# Ensure root directory is on sys.path
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 
 from flask import Flask, render_template, jsonify, request
 from client.client_controller import controller
-from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT
+from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT, DOWNLOADS_DIR
 
 app = Flask(
     __name__,
@@ -52,6 +51,60 @@ def disconnect_server():
     """Triggers disconnect on real Python sockets."""
     result = controller.disconnect()
     return jsonify(result)
+
+
+@app.route("/api/files", methods=["GET"])
+def get_files():
+    """Lists files available on the TCP server."""
+    files = controller.list_files()
+    return jsonify({"files": files})
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload_file():
+    """Receives browser file upload and triggers real TCP streaming upload to server."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded in request"})
+
+    file_obj = request.files["file"]
+    if not file_obj.filename:
+        return jsonify({"success": False, "error": "Empty filename"})
+
+    # Save incoming browser file to local client downloads staging path
+    temp_dir = DOWNLOADS_DIR / "staging"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / file_obj.filename
+    file_obj.save(str(temp_path))
+
+    # Trigger real Python TCP socket upload to server
+    res = controller.upload_file(str(temp_path))
+
+    # Clean up temp staging file
+    if temp_path.exists():
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+
+    return jsonify(res)
+
+
+@app.route("/api/download", methods=["POST"])
+def download_file():
+    """Triggers real TCP streaming download from server to client storage."""
+    data = request.json or {}
+    filename = data.get("filename", "")
+    if not filename:
+        return jsonify({"success": False, "error": "Filename parameter required"})
+
+    res = controller.download_file(filename)
+    return jsonify(res)
+
+
+@app.route("/api/transfers", methods=["GET"])
+def get_transfers():
+    """Returns real transfer history."""
+    return jsonify({"transfers": controller.get_transfers()})
 
 
 @app.route("/api/logs", methods=["GET"])
