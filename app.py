@@ -101,6 +101,25 @@ def download_file():
     return jsonify(res)
 
 
+@app.route("/api/chat/send", methods=["POST"])
+def send_chat():
+    """Triggers UDP chat message datagram sending to server."""
+    data = request.json or {}
+    msg_text = data.get("message", "")
+    if not msg_text:
+        return jsonify({"success": False, "error": "Message parameter required"})
+
+    res = controller.send_chat_message(msg_text)
+    return jsonify(res)
+
+
+@app.route("/api/chat/messages", methods=["GET"])
+def get_chat_messages():
+    """Returns chat history received over UDP datagrams."""
+    messages = controller.get_chat_history()
+    return jsonify({"messages": messages})
+
+
 @app.route("/api/users", methods=["GET"])
 def get_users():
     """Returns list of online users from UDP server presence registry."""

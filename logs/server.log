@@ -333,3 +333,208 @@
 [11:37:55] [MainThread] INFO: UDP Client Registered: StaleUser at 127.0.0.1:59999
 [11:37:55] [MainThread] INFO: Presence Timeout: User 'StaleUser' marked OFFLINE (No heartbeat for 15.0s)
 [11:37:55] [MainThread] INFO: UDP Server stopped
+[11:42:17] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6006
+[11:42:17] [UDPReceiveLoop] INFO: UDP Client Registered: Alice at 127.0.0.1:58676
+[11:42:17] [UDPReceiveLoop] INFO: UDP User JOIN: 'Alice' (127.0.0.1:58676)
+[11:42:19] [UDPReceiveLoop] INFO: UDP Client Registered: LongTextUser at 127.0.0.1:58677
+[11:42:19] [UDPReceiveLoop] INFO: UDP User JOIN: 'LongTextUser' (127.0.0.1:58677)
+[11:42:19] [UDPReceiveLoop] INFO: User marked OFFLINE: LongTextUser
+[11:42:19] [MainThread] INFO: UDP Server stopped
+[11:42:19] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:42:19] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51269
+[11:42:19] [TCPClientHandler-51269] INFO: HELLO received from Uploader (127.0.0.1:51269)
+[11:42:19] [TCPClientHandler-51269] INFO: UPLOAD initiated from 127.0.0.1:51269: sample_test_1mb.dat, offset=0
+[11:42:20] [TCPClientHandler-51269] INFO: Upload/Resume completed successfully: sample_test_1mb.dat
+[11:42:20] [TCPClientHandler-51269] INFO: TCP Client disconnected: 127.0.0.1:51269
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51270
+[11:42:20] [TCPClientHandler-51270] INFO: HELLO received from Lister (127.0.0.1:51270)
+[11:42:20] [TCPClientHandler-51270] INFO: File list sent to 127.0.0.1:51270: 2 files
+[11:42:20] [TCPClientHandler-51270] INFO: TCP Client disconnected: 127.0.0.1:51270
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51271
+[11:42:20] [TCPClientHandler-51271] INFO: HELLO received from Downloader (127.0.0.1:51271)
+[11:42:20] [TCPClientHandler-51271] INFO: DOWNLOAD requested from 127.0.0.1:51271: sample_test_1mb.dat, offset=0
+[11:42:20] [TCPClientHandler-51271] INFO: Download completed for 127.0.0.1:51271: sample_test_1mb.dat
+[11:42:20] [TCPClientHandler-51271] INFO: TCP Client disconnected: 127.0.0.1:51271
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51272
+[11:42:20] [TCPClientHandler-51272] INFO: DOWNLOAD requested from 127.0.0.1:51272: secret.txt, offset=0
+[11:42:20] [TCPClientHandler-51272] INFO: TCP Client disconnected: 127.0.0.1:51272
+[11:42:20] [MainThread] INFO: TCP Server stopped
+[11:42:20] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5004
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51279
+[11:42:20] [TCPClientHandler-51279] INFO: HELLO received from ResumeUploader (127.0.0.1:51279)
+[11:42:20] [TCPClientHandler-51279] INFO: RESUME_UPLOAD initiated from 127.0.0.1:51279: resume_test_2mb.dat, offset=1048576
+[11:42:20] [TCPClientHandler-51279] INFO: Upload/Resume completed successfully: resume_test_2mb.dat
+[11:42:20] [TCPClientHandler-51279] INFO: TCP Client disconnected: 127.0.0.1:51279
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51280
+[11:42:20] [TCPClientHandler-51280] INFO: HELLO received from ResumeDownloader (127.0.0.1:51280)
+[11:42:20] [TCPClientHandler-51280] INFO: RESUME_DOWNLOAD requested from 127.0.0.1:51280: resume_test_2mb.dat, offset=1048576
+[11:42:20] [TCPClientHandler-51280] INFO: Download completed for 127.0.0.1:51280: resume_test_2mb.dat
+[11:42:20] [TCPClientHandler-51280] INFO: TCP Client disconnected: 127.0.0.1:51280
+[11:42:20] [MainThread] INFO: TCP Server stopped
+[11:42:20] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51281
+[11:42:20] [TCPClientHandler-51281] INFO: HELLO received from ClientA (127.0.0.1:51281)
+[11:42:20] [TCPClientHandler-51281] INFO: TCP Client disconnected: 127.0.0.1:51281
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51282
+[11:42:20] [TCPClientHandler-51282] INFO: HELLO received from ClientA (127.0.0.1:51282)
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51283
+[11:42:20] [TCPClientHandler-51283] INFO: HELLO received from ClientB (127.0.0.1:51283)
+[11:42:20] [TCPClientHandler-51282] INFO: TCP Client disconnected: 127.0.0.1:51282
+[11:42:20] [TCPClientHandler-51283] INFO: HELLO received from ClientB_Repeat (127.0.0.1:51283)
+[11:42:20] [TCPClientHandler-51283] INFO: TCP Client disconnected: 127.0.0.1:51283
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51284
+[11:42:20] [TCPClientHandler-51284] WARNING: Malformed payload from 127.0.0.1:51284: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:42:20] [TCPClientHandler-51284] INFO: TCP Client disconnected: 127.0.0.1:51284
+[11:42:20] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:51285
+[11:42:20] [TCPClientHandler-51285] INFO: HELLO received from PostErrorCheck (127.0.0.1:51285)
+[11:42:20] [TCPClientHandler-51285] INFO: TCP Client disconnected: 127.0.0.1:51285
+[11:42:20] [MainThread] INFO: TCP Server stopped
+[11:42:20] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6005
+[11:42:21] [UDPReceiveLoop] INFO: UDP Client Registered: TestUserA at 127.0.0.1:50061
+[11:42:21] [UDPReceiveLoop] INFO: UDP User JOIN: 'TestUserA' (127.0.0.1:50061)
+[11:42:23] [UDPReceiveLoop] INFO: UDP Client Registered: HeartbeatUser at 127.0.0.1:50698
+[11:42:23] [UDPReceiveLoop] INFO: UDP User JOIN: 'HeartbeatUser' (127.0.0.1:50698)
+[11:42:23] [UDPReceiveLoop] INFO: User marked OFFLINE: HeartbeatUser
+[11:42:23] [MainThread] INFO: UDP Client Registered: StaleUser at 127.0.0.1:59999
+[11:42:23] [MainThread] INFO: Presence Timeout: User 'StaleUser' marked OFFLINE (No heartbeat for 15.0s)
+[11:42:23] [MainThread] INFO: UDP Server stopped
+[11:43:44] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6006
+[11:43:44] [UDPReceiveLoop] INFO: UDP Client Registered: Alice at 127.0.0.1:52151
+[11:43:44] [UDPReceiveLoop] INFO: UDP User JOIN: 'Alice' (127.0.0.1:52151)
+[11:43:44] [UDPReceiveLoop] INFO: UDP Client Registered: Bob at 127.0.0.1:52153
+[11:43:44] [UDPReceiveLoop] INFO: UDP User JOIN: 'Bob' (127.0.0.1:52153)
+[11:43:44] [UDPReceiveLoop] INFO: UDP Chat MSG from 'Alice' [seq=101]: Hello from Alice over UDP!
+[11:43:45] [UDPReceiveLoop] INFO: UDP Client Registered: LongTextUser at 127.0.0.1:52155
+[11:43:45] [UDPReceiveLoop] INFO: UDP User JOIN: 'LongTextUser' (127.0.0.1:52155)
+[11:43:45] [MainThread] INFO: UDP Server stopped
+[11:43:45] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:43:45] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52885
+[11:43:45] [TCPClientHandler-52885] INFO: HELLO received from Uploader (127.0.0.1:52885)
+[11:43:45] [TCPClientHandler-52885] INFO: UPLOAD initiated from 127.0.0.1:52885: sample_test_1mb.dat, offset=0
+[11:43:45] [TCPClientHandler-52885] INFO: Upload/Resume completed successfully: sample_test_1mb.dat
+[11:43:45] [TCPClientHandler-52885] INFO: TCP Client disconnected: 127.0.0.1:52885
+[11:43:45] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52886
+[11:43:45] [TCPClientHandler-52886] INFO: HELLO received from Lister (127.0.0.1:52886)
+[11:43:45] [TCPClientHandler-52886] INFO: File list sent to 127.0.0.1:52886: 2 files
+[11:43:45] [TCPClientHandler-52886] INFO: TCP Client disconnected: 127.0.0.1:52886
+[11:43:45] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52887
+[11:43:45] [TCPClientHandler-52887] INFO: HELLO received from Downloader (127.0.0.1:52887)
+[11:43:45] [TCPClientHandler-52887] INFO: DOWNLOAD requested from 127.0.0.1:52887: sample_test_1mb.dat, offset=0
+[11:43:45] [TCPClientHandler-52887] INFO: Download completed for 127.0.0.1:52887: sample_test_1mb.dat
+[11:43:45] [TCPClientHandler-52887] INFO: TCP Client disconnected: 127.0.0.1:52887
+[11:43:45] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52888
+[11:43:45] [TCPClientHandler-52888] INFO: DOWNLOAD requested from 127.0.0.1:52888: secret.txt, offset=0
+[11:43:45] [TCPClientHandler-52888] INFO: TCP Client disconnected: 127.0.0.1:52888
+[11:43:45] [MainThread] INFO: TCP Server stopped
+[11:43:45] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5004
+[11:43:45] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52895
+[11:43:45] [TCPClientHandler-52895] INFO: HELLO received from ResumeUploader (127.0.0.1:52895)
+[11:43:45] [TCPClientHandler-52895] INFO: RESUME_UPLOAD initiated from 127.0.0.1:52895: resume_test_2mb.dat, offset=1048576
+[11:43:45] [TCPClientHandler-52895] INFO: Upload/Resume completed successfully: resume_test_2mb.dat
+[11:43:46] [TCPClientHandler-52895] INFO: TCP Client disconnected: 127.0.0.1:52895
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52896
+[11:43:46] [TCPClientHandler-52896] INFO: HELLO received from ResumeDownloader (127.0.0.1:52896)
+[11:43:46] [TCPClientHandler-52896] INFO: RESUME_DOWNLOAD requested from 127.0.0.1:52896: resume_test_2mb.dat, offset=1048576
+[11:43:46] [TCPClientHandler-52896] INFO: Download completed for 127.0.0.1:52896: resume_test_2mb.dat
+[11:43:46] [MainThread] INFO: TCP Server stopped
+[11:43:46] [TCPClientHandler-52896] INFO: TCP Client disconnected: 127.0.0.1:52896
+[11:43:46] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52897
+[11:43:46] [TCPClientHandler-52897] INFO: HELLO received from ClientA (127.0.0.1:52897)
+[11:43:46] [TCPClientHandler-52897] INFO: TCP Client disconnected: 127.0.0.1:52897
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52898
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52899
+[11:43:46] [TCPClientHandler-52898] INFO: HELLO received from ClientA (127.0.0.1:52898)
+[11:43:46] [TCPClientHandler-52899] INFO: HELLO received from ClientB (127.0.0.1:52899)
+[11:43:46] [TCPClientHandler-52898] INFO: TCP Client disconnected: 127.0.0.1:52898
+[11:43:46] [TCPClientHandler-52899] INFO: HELLO received from ClientB_Repeat (127.0.0.1:52899)
+[11:43:46] [TCPClientHandler-52899] INFO: TCP Client disconnected: 127.0.0.1:52899
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52900
+[11:43:46] [TCPClientHandler-52900] WARNING: Malformed payload from 127.0.0.1:52900: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:43:46] [TCPClientHandler-52900] INFO: TCP Client disconnected: 127.0.0.1:52900
+[11:43:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:52901
+[11:43:46] [TCPClientHandler-52901] INFO: HELLO received from PostErrorCheck (127.0.0.1:52901)
+[11:43:46] [MainThread] INFO: TCP Server stopped
+[11:43:46] [TCPClientHandler-52901] INFO: TCP Client disconnected: 127.0.0.1:52901
+[11:43:46] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6005
+[11:43:46] [UDPReceiveLoop] INFO: UDP Client Registered: TestUserA at 127.0.0.1:59394
+[11:43:46] [UDPReceiveLoop] INFO: UDP User JOIN: 'TestUserA' (127.0.0.1:59394)
+[11:43:46] [UDPReceiveLoop] INFO: User marked OFFLINE: TestUserA
+[11:43:46] [UDPReceiveLoop] INFO: UDP Client Registered: HeartbeatUser at 127.0.0.1:50799
+[11:43:46] [UDPReceiveLoop] INFO: UDP User JOIN: 'HeartbeatUser' (127.0.0.1:50799)
+[11:43:46] [UDPReceiveLoop] INFO: User marked OFFLINE: HeartbeatUser
+[11:43:46] [MainThread] INFO: UDP Client Registered: StaleUser at 127.0.0.1:59999
+[11:43:46] [MainThread] INFO: Presence Timeout: User 'StaleUser' marked OFFLINE (No heartbeat for 15.0s)
+[11:43:46] [UDPReceiveLoop] ERROR: Error sending UDP datagram to ('127.0.0.1', 50799): [WinError 10038] An operation was attempted on something that is not a socket
+[11:43:46] [MainThread] INFO: UDP Server stopped
+[11:44:42] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6006
+[11:44:42] [UDPReceiveLoop] INFO: UDP Client Registered: Alice at 127.0.0.1:62845
+[11:44:42] [UDPReceiveLoop] INFO: UDP User JOIN: 'Alice' (127.0.0.1:62845)
+[11:44:42] [UDPReceiveLoop] INFO: UDP Client Registered: Bob at 127.0.0.1:62846
+[11:44:42] [UDPReceiveLoop] INFO: UDP User JOIN: 'Bob' (127.0.0.1:62846)
+[11:44:43] [UDPReceiveLoop] INFO: UDP Chat MSG from 'Alice' [seq=101]: Hello from Alice over UDP!
+[11:44:43] [UDPReceiveLoop] INFO: User marked OFFLINE: Alice
+[11:44:43] [UDPReceiveLoop] INFO: User marked OFFLINE: Bob
+[11:44:43] [UDPReceiveLoop] INFO: UDP Client Registered: LongTextUser at 127.0.0.1:62847
+[11:44:43] [UDPReceiveLoop] INFO: UDP User JOIN: 'LongTextUser' (127.0.0.1:62847)
+[11:44:43] [MainThread] INFO: UDP Server stopped
+[11:44:43] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:44:43] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59294
+[11:44:43] [TCPClientHandler-59294] INFO: HELLO received from Uploader (127.0.0.1:59294)
+[11:44:43] [TCPClientHandler-59294] INFO: UPLOAD initiated from 127.0.0.1:59294: sample_test_1mb.dat, offset=0
+[11:44:43] [TCPClientHandler-59294] INFO: Upload/Resume completed successfully: sample_test_1mb.dat
+[11:44:43] [TCPClientHandler-59294] INFO: TCP Client disconnected: 127.0.0.1:59294
+[11:44:43] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59295
+[11:44:43] [TCPClientHandler-59295] INFO: HELLO received from Lister (127.0.0.1:59295)
+[11:44:43] [TCPClientHandler-59295] INFO: File list sent to 127.0.0.1:59295: 2 files
+[11:44:43] [TCPClientHandler-59295] INFO: TCP Client disconnected: 127.0.0.1:59295
+[11:44:43] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59296
+[11:44:43] [TCPClientHandler-59296] INFO: HELLO received from Downloader (127.0.0.1:59296)
+[11:44:43] [TCPClientHandler-59296] INFO: DOWNLOAD requested from 127.0.0.1:59296: sample_test_1mb.dat, offset=0
+[11:44:43] [TCPClientHandler-59296] INFO: Download completed for 127.0.0.1:59296: sample_test_1mb.dat
+[11:44:43] [TCPClientHandler-59296] INFO: TCP Client disconnected: 127.0.0.1:59296
+[11:44:43] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59297
+[11:44:43] [TCPClientHandler-59297] INFO: DOWNLOAD requested from 127.0.0.1:59297: secret.txt, offset=0
+[11:44:43] [TCPClientHandler-59297] INFO: TCP Client disconnected: 127.0.0.1:59297
+[11:44:43] [MainThread] INFO: TCP Server stopped
+[11:44:43] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5004
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59304
+[11:44:44] [TCPClientHandler-59304] INFO: HELLO received from ResumeUploader (127.0.0.1:59304)
+[11:44:44] [TCPClientHandler-59304] INFO: RESUME_UPLOAD initiated from 127.0.0.1:59304: resume_test_2mb.dat, offset=1048576
+[11:44:44] [TCPClientHandler-59304] INFO: Upload/Resume completed successfully: resume_test_2mb.dat
+[11:44:44] [TCPClientHandler-59304] INFO: TCP Client disconnected: 127.0.0.1:59304
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59305
+[11:44:44] [TCPClientHandler-59305] INFO: HELLO received from ResumeDownloader (127.0.0.1:59305)
+[11:44:44] [TCPClientHandler-59305] INFO: RESUME_DOWNLOAD requested from 127.0.0.1:59305: resume_test_2mb.dat, offset=1048576
+[11:44:44] [TCPClientHandler-59305] INFO: Download completed for 127.0.0.1:59305: resume_test_2mb.dat
+[11:44:44] [TCPClientHandler-59305] INFO: TCP Client disconnected: 127.0.0.1:59305
+[11:44:44] [MainThread] INFO: TCP Server stopped
+[11:44:44] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59306
+[11:44:44] [TCPClientHandler-59306] INFO: HELLO received from ClientA (127.0.0.1:59306)
+[11:44:44] [TCPClientHandler-59306] INFO: TCP Client disconnected: 127.0.0.1:59306
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59307
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59308
+[11:44:44] [TCPClientHandler-59307] INFO: HELLO received from ClientA (127.0.0.1:59307)
+[11:44:44] [TCPClientHandler-59308] INFO: HELLO received from ClientB (127.0.0.1:59308)
+[11:44:44] [TCPClientHandler-59308] INFO: HELLO received from ClientB_Repeat (127.0.0.1:59308)
+[11:44:44] [TCPClientHandler-59307] INFO: TCP Client disconnected: 127.0.0.1:59307
+[11:44:44] [TCPClientHandler-59308] INFO: TCP Client disconnected: 127.0.0.1:59308
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59309
+[11:44:44] [TCPClientHandler-59309] WARNING: Malformed payload from 127.0.0.1:59309: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:44:44] [TCPClientHandler-59309] INFO: TCP Client disconnected: 127.0.0.1:59309
+[11:44:44] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:59310
+[11:44:44] [TCPClientHandler-59310] INFO: HELLO received from PostErrorCheck (127.0.0.1:59310)
+[11:44:44] [TCPClientHandler-59310] INFO: TCP Client disconnected: 127.0.0.1:59310
+[11:44:44] [MainThread] INFO: TCP Server stopped
+[11:44:44] [MainThread] INFO: UDP Chat & Presence Server listening on 127.0.0.1:6005
+[11:44:44] [UDPReceiveLoop] INFO: UDP Client Registered: TestUserA at 127.0.0.1:62503
+[11:44:44] [UDPReceiveLoop] INFO: UDP User JOIN: 'TestUserA' (127.0.0.1:62503)
+[11:44:45] [UDPReceiveLoop] INFO: User marked OFFLINE: TestUserA
+[11:44:45] [UDPReceiveLoop] INFO: UDP Client Registered: HeartbeatUser at 127.0.0.1:62504
+[11:44:45] [UDPReceiveLoop] INFO: UDP User JOIN: 'HeartbeatUser' (127.0.0.1:62504)
+[11:44:45] [UDPReceiveLoop] INFO: User marked OFFLINE: HeartbeatUser
+[11:44:45] [MainThread] INFO: UDP Client Registered: StaleUser at 127.0.0.1:59999
+[11:44:45] [MainThread] INFO: Presence Timeout: User 'StaleUser' marked OFFLINE (No heartbeat for 15.0s)
+[11:44:45] [UDPReceiveLoop] ERROR: Error sending UDP datagram to ('127.0.0.1', 62504): [WinError 10038] An operation was attempted on something that is not a socket
+[11:44:45] [MainThread] INFO: UDP Server stopped

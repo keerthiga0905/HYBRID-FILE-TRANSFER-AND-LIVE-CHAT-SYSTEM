@@ -1,6 +1,6 @@
 """
 Client Controller - Manages real Python TCP and UDP Socket Clients for the Product UI.
-Maintains state, TCP/UDP connection status, real transfer history, partial file resume status, online user registry, and activity logs.
+Maintains state, TCP/UDP connection status, real transfer history, live chat messages, online user registry, and activity logs.
 """
 
 import threading
@@ -83,9 +83,9 @@ class ClientController:
             udp_resp = self.udp_client.join_chat(self.username)
             if udp_resp:
                 self.udp_connected = True
-                self._add_log("SUCCESS", f"UDP Chat & Presence Joined! Started 5s Heartbeat Thread.")
+                self._add_log("SUCCESS", "UDP Chat & Presence Joined! Started 5s Heartbeat Thread.")
             else:
-                self._add_log("WARN", "UDP Join request timed out (Server may not have UDP enabled yet)")
+                self._add_log("WARN", "UDP Join request timed out")
 
         return {
             "success": True,
@@ -164,13 +164,28 @@ class ClientController:
 
         return res
 
+    def send_chat_message(self, message: str) -> Dict[str, Any]:
+        """Sends UDP MSG datagram to server."""
+        if not self.udp_connected or not self.udp_client:
+            return {"success": False, "error": "Not connected to UDP server"}
+
+        res = self.udp_client.send_chat_message(message)
+        if res.get("success"):
+            self._add_log("UDP", f"Sent UDP Chat Message [seq={res.get('sequence')}]: '{message}'")
+        return res
+
+    def get_chat_history(self) -> List[Dict[str, Any]]:
+        """Returns received chat messages."""
+        if self.udp_client:
+            return self.udp_client.get_chat_history()
+        return []
+
     def get_online_users(self) -> List[Dict[str, Any]]:
         """Returns list of online users from UDP server presence registry."""
         if self.udp_client and self.udp_connected:
             users = self.udp_client.get_online_users()
             if users:
                 return users
-        # Fallback to local user
         return [{"username": self.username, "endpoint": "127.0.0.1", "status": "ONLINE", "last_seen": get_timestamp()}]
 
     def list_partial_files(self) -> List[Dict[str, Any]]:

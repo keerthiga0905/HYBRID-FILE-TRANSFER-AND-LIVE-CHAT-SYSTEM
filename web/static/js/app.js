@@ -1,7 +1,7 @@
 /* 
    HYBRID TRANSFER - Product UI Controller Script
    Handles Navigation, Connection Management, API Interactivity, Real-time Backend Sync,
-   File Listing, TCP Upload, TCP Download, UDP Presence, and Online Users Registry.
+   File Listing, TCP Upload, TCP Download, UDP Presence, and Live Chat Messaging.
 */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,7 +13,7 @@ let pollTimer = null;
 
 function initApp() {
     checkBackendStatus();
-    pollTimer = setInterval(checkBackendStatus, 3000);
+    pollTimer = setInterval(checkBackendStatus, 2000);
 }
 
 // Tab Switching logic
@@ -44,6 +44,7 @@ function switchTab(tabId) {
         fetchTransfers();
     } else if (tabId === 'chat') {
         fetchOnlineUsers();
+        fetchChatMessages();
     } else if (tabId === 'activity') {
         fetchLogs();
     }
@@ -112,7 +113,11 @@ async function checkBackendStatus() {
         const response = await fetch('/api/status');
         const status = await response.json();
         updateUIState(status);
-        if (currentTab === 'chat' || currentTab === 'dashboard') {
+
+        if (currentTab === 'chat') {
+            fetchOnlineUsers();
+            fetchChatMessages();
+        } else if (currentTab === 'dashboard') {
             fetchOnlineUsers();
         }
     } catch (e) {
@@ -129,7 +134,7 @@ function updateUIState(status) {
     if (userName) userName.textContent = status.username || 'Keerthi';
     if (userGreeting) userGreeting.textContent = status.username || 'Keerthi';
 
-    // TCP Pill & Dashboard Status
+    // TCP Status
     const tcpPill = document.getElementById('pill-tcp');
     const dashTcpVal = document.getElementById('dash-tcp-val');
     const footerTcpTxt = document.getElementById('footer-tcp-txt');
@@ -159,7 +164,7 @@ function updateUIState(status) {
         if (footerTcpDot) footerTcpDot.className = 'dot offline';
     }
 
-    // UDP Pill & Dashboard Status
+    // UDP Status
     const udpPill = document.getElementById('pill-udp');
     const dashUdpVal = document.getElementById('dash-udp-val');
     const footerUdpTxt = document.getElementById('footer-udp-txt');
@@ -187,6 +192,69 @@ function updateUIState(status) {
         }
         if (footerUdpTxt) footerUdpTxt.textContent = 'Disconnected';
         if (footerUdpDot) footerUdpDot.className = 'dot offline';
+    }
+}
+
+// Live Chat Operations
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = '';
+
+    try {
+        const res = await fetch('/api/chat/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text })
+        });
+        const data = await res.json();
+        if (data.success) {
+            fetchChatMessages();
+            fetchLogs();
+        } else {
+            alert('Failed to send message: ' + (data.error || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Chat send error: ' + e.message);
+    }
+}
+
+async function fetchChatMessages() {
+    try {
+        const res = await fetch('/api/chat/messages');
+        const data = await res.json();
+        const box = document.getElementById('chat-messages-list');
+
+        if (box && data.messages) {
+            if (data.messages.length === 0) {
+                box.innerHTML = `<div class="sys-msg">Connected to UDP Chat Server. Type a message below to test datagram communication.</div>`;
+                return;
+            }
+
+            box.innerHTML = '';
+            data.messages.forEach(m => {
+                const msgDiv = document.createElement('div');
+                msgDiv.style.padding = '10px 14px';
+                msgDiv.style.borderRadius = '8px';
+                msgDiv.style.backgroundColor = 'rgba(255,255,255,0.04)';
+                msgDiv.style.border = '1px solid var(--border-color)';
+                msgDiv.style.marginBottom = '8px';
+
+                msgDiv.innerHTML = `
+                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
+                        <strong style="color: var(--primary-blue);">${m.sender}</strong>
+                        <span>[UDP Seq #${m.sequence}] ${m.timestamp}</span>
+                    </div>
+                    <div style="font-size: 14px; color: var(--text-white);">${m.message}</div>
+                `;
+                box.appendChild(msgDiv);
+            });
+            box.scrollTop = box.scrollHeight;
+        }
+    } catch (e) {
+        console.warn('Fetch chat messages error:', e);
     }
 }
 
