@@ -239,6 +239,11 @@ class ClientController:
         with self._lock:
             return list(self.activity_logs)
 
+    def get_network_stats(self) -> Dict[str, Any]:
+        """Returns live network stats summary (throughput, latency RTT, packets, reliability)."""
+        from shared.stats import global_stats
+        return global_stats.get_summary()
+
 
 # Singleton instance
 controller = ClientController()

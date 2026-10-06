@@ -67,6 +67,12 @@ class UDPClient:
                     continue
 
                 try:
+                    from shared.stats import global_stats
+                    global_stats.record_udp_recv(len(data))
+                except Exception:
+                    pass
+
+                try:
                     payload = json.loads(data.decode("utf-8"))
                     msg_type = payload.get("type", "")
 
@@ -76,6 +82,12 @@ class UDPClient:
 
                         elif msg_type == "ACK":
                             seq = int(payload.get("sequence", 0))
+                            try:
+                                from shared.stats import global_stats
+                                global_stats.record_udp_ack()
+                            except Exception:
+                                pass
+
                             if seq in self.pending_acks:
                                 self.pending_acks[seq]["status"] = "DELIVERED"
                                 print_success(f"UDP ACK [{seq}] Received!")
@@ -196,6 +208,11 @@ class UDPClient:
         try:
             raw_bytes = json.dumps(msg_payload).encode("utf-8")
             self.sock.sendto(raw_bytes, (self.host, self.port))
+            try:
+                from shared.stats import global_stats
+                global_stats.record_udp_send(len(raw_bytes))
+            except Exception:
+                pass
             print_info(f"Sent UDP Chat MSG [seq={seq}]: '{text}'", tag="UDP")
         except Exception as e:
             print_error(f"Error sending UDP message: {e}")
@@ -233,6 +250,12 @@ class UDPClient:
                 ack_info["retries"] = retries
                 ack_info["status"] = "RETRYING"
 
+                try:
+                    from shared.stats import global_stats
+                    global_stats.record_udp_retransmit()
+                except Exception:
+                    pass
+
                 # Update status in chat history
                 for m in self.messages_history:
                     if m.get("sequence") == seq:
@@ -244,6 +267,11 @@ class UDPClient:
                     if self.sock and self.is_connected:
                         raw_bytes = json.dumps(ack_info["payload"]).encode("utf-8")
                         self.sock.sendto(raw_bytes, (self.host, self.port))
+                        try:
+                            from shared.stats import global_stats
+                            global_stats.record_udp_send(len(raw_bytes))
+                        except Exception:
+                            pass
                 except Exception as e:
                     print_error(f"Retransmit error: {e}")
 
@@ -251,6 +279,11 @@ class UDPClient:
         with self._lock:
             if seq in self.pending_acks and self.pending_acks[seq]["status"] != "DELIVERED":
                 self.pending_acks[seq]["status"] = "FAILED"
+                try:
+                    from shared.stats import global_stats
+                    global_stats.record_udp_failure()
+                except Exception:
+                    pass
                 for m in self.messages_history:
                     if m.get("sequence") == seq:
                         m["status"] = "Delivery Failed"

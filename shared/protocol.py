@@ -40,7 +40,13 @@ def send_message(sock: socket.socket, data: Dict[str, Any]) -> None:
     json_bytes = json.dumps(data).encode("utf-8")
     payload_len = len(json_bytes)
     header = struct.pack(">I", payload_len)
-    sock.sendall(header + json_bytes)
+    full_pkt = header + json_bytes
+    sock.sendall(full_pkt)
+    try:
+        from shared.stats import global_stats
+        global_stats.record_tcp_send(len(full_pkt))
+    except Exception:
+        pass
 
 
 def receive_message(sock: socket.socket) -> Optional[Dict[str, Any]]:
@@ -62,6 +68,12 @@ def receive_message(sock: socket.socket) -> Optional[Dict[str, Any]]:
     payload_bytes = recv_exact(sock, payload_len)
     if payload_bytes is None:
         return None
+
+    try:
+        from shared.stats import global_stats
+        global_stats.record_tcp_recv(4 + payload_len)
+    except Exception:
+        pass
 
     try:
         decoded_str = payload_bytes.decode("utf-8")

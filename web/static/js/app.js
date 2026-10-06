@@ -47,6 +47,8 @@ function switchTab(tabId) {
         fetchChatMessages();
     } else if (tabId === 'activity') {
         fetchLogs();
+    } else if (tabId === 'statistics' || tabId === 'network') {
+        fetchNetworkStats();
     }
 }
 
@@ -441,5 +443,52 @@ async function fetchLogs() {
         }
     } catch (e) {
         console.warn('Fetch logs error:', e);
+    }
+}
+
+// Format bytes helper
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Fetch Live Network Metrics
+async function fetchNetworkStats() {
+    try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+
+        if (data.tcp) {
+            const elTcpSent = document.getElementById('stat-tcp-bytes-sent');
+            const elTcpRecv = document.getElementById('stat-tcp-bytes-recv');
+            const elTcpSpeedUp = document.getElementById('stat-tcp-speed-up');
+            const elTcpSpeedDown = document.getElementById('stat-tcp-speed-down');
+
+            if (elTcpSent) elTcpSent.textContent = formatBytes(data.tcp.bytes_sent);
+            if (elTcpRecv) elTcpRecv.textContent = formatBytes(data.tcp.bytes_received);
+            if (elTcpSpeedUp) elTcpSpeedUp.textContent = data.tcp.upload_speed_kbs + ' KB/s';
+            if (elTcpSpeedDown) elTcpSpeedDown.textContent = data.tcp.download_speed_kbs + ' KB/s';
+        }
+
+        if (data.udp) {
+            const elUdpSent = document.getElementById('stat-udp-bytes-sent');
+            const elUdpRecv = document.getElementById('stat-udp-bytes-recv');
+            const elUdpAcks = document.getElementById('stat-udp-acks');
+            const elUdpRetries = document.getElementById('stat-udp-retries');
+            const elUdpSuccess = document.getElementById('stat-udp-success');
+            const elUdpLoss = document.getElementById('stat-udp-loss');
+
+            if (elUdpSent) elUdpSent.textContent = formatBytes(data.udp.bytes_sent);
+            if (elUdpRecv) elUdpRecv.textContent = formatBytes(data.udp.bytes_received);
+            if (elUdpAcks) elUdpAcks.textContent = data.udp.acks_received;
+            if (elUdpRetries) elUdpRetries.textContent = data.udp.retransmissions;
+            if (elUdpSuccess) elUdpSuccess.textContent = data.udp.success_percentage + '%';
+            if (elUdpLoss) elUdpLoss.textContent = data.udp.loss_percentage + '%';
+        }
+    } catch (e) {
+        console.warn('Fetch network stats error:', e);
     }
 }

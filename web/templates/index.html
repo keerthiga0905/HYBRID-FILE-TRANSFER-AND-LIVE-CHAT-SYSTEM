@@ -286,22 +286,31 @@
                 <section id="page-statistics" class="page-view">
                     <div class="page-header">
                         <h2>Network Statistics</h2>
-                        <p class="subtitle">Measured networking performance metrics</p>
+                        <p class="subtitle">Measured live networking performance metrics & throughput</p>
                     </div>
                     <div class="stats-tables-grid">
                         <div class="stat-box">
                             <h3>TCP File Transfer Metrics</h3>
-                            <div class="metric-row"><span>TCP Socket Status</span> <strong id="stat-tcp-status">Connected</strong></div>
-                            <div class="metric-row"><span>Port</span> <strong>5000 / TCP</strong></div>
+                            <div class="metric-row"><span>TCP Socket Status</span> <strong id="stat-tcp-status">Ready</strong></div>
+                            <div class="metric-row"><span>Port</span> <strong>5000 / TCP Stream</strong></div>
+                            <div class="metric-row"><span>TCP Bytes Sent</span> <strong id="stat-tcp-bytes-sent">0 B</strong></div>
+                            <div class="metric-row"><span>TCP Bytes Received</span> <strong id="stat-tcp-bytes-recv">0 B</strong></div>
+                            <div class="metric-row"><span>Upload Speed</span> <strong id="stat-tcp-speed-up">0.0 KB/s</strong></div>
+                            <div class="metric-row"><span>Download Speed</span> <strong id="stat-tcp-speed-down">0.0 KB/s</strong></div>
                             <div class="metric-row"><span>Framing Protocol</span> <strong>4-Byte Big-Endian Length + JSON</strong></div>
-                            <div class="metric-row"><span>SHA-256 Integrity Verification</span> <strong>Passed</strong></div>
+                            <div class="metric-row"><span>SHA-256 Verification</span> <strong>Active (Constant-Time HMAC)</strong></div>
                         </div>
                         <div class="stat-box">
                             <h3>UDP Communication Metrics</h3>
                             <div class="metric-row"><span>UDP Socket Status</span> <strong id="stat-udp-status">Ready</strong></div>
-                            <div class="metric-row"><span>Port</span> <strong>6000 / UDP</strong></div>
-                            <div class="metric-row"><span>Application ACK Retry Timeout</span> <strong>1.0 sec</strong></div>
-                            <div class="metric-row"><span>Max Retries Limit</span> <strong>3 Retries</strong></div>
+                            <div class="metric-row"><span>Port</span> <strong>6000 / UDP Datagram</strong></div>
+                            <div class="metric-row"><span>UDP Bytes Sent</span> <strong id="stat-udp-bytes-sent">0 B</strong></div>
+                            <div class="metric-row"><span>UDP Bytes Received</span> <strong id="stat-udp-bytes-recv">0 B</strong></div>
+                            <div class="metric-row"><span>ACK Datagrams Received</span> <strong id="stat-udp-acks">0</strong></div>
+                            <div class="metric-row"><span>Application Retransmissions</span> <strong id="stat-udp-retries">0</strong></div>
+                            <div class="metric-row"><span>Packet Delivery Success Rate</span> <strong id="stat-udp-success">100.0%</strong></div>
+                            <div class="metric-row"><span>Packet Loss Percentage</span> <strong id="stat-udp-loss">0.0%</strong></div>
+                            <div class="metric-row"><span>ACK Timeout / Max Retries</span> <strong>1.0s / 3 Retries</strong></div>
                         </div>
                     </div>
                 </section>

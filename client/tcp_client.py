@@ -121,6 +121,11 @@ class TCPClient:
                 while chunk := f.read(CHUNK_SIZE):
                     self.sock.sendall(chunk)
                     sent_bytes += len(chunk)
+                    try:
+                        from shared.stats import global_stats
+                        global_stats.record_tcp_send(len(chunk))
+                    except Exception:
+                        pass
                     if progress_callback:
                         elapsed = (datetime.now() - start_time).total_seconds()
                         speed = ((sent_bytes - offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
@@ -198,6 +203,11 @@ class TCPClient:
 
                     f.write(chunk)
                     received_bytes += len(chunk)
+                    try:
+                        from shared.stats import global_stats
+                        global_stats.record_tcp_recv(len(chunk))
+                    except Exception:
+                        pass
 
                     if progress_callback:
                         elapsed = (datetime.now() - start_time).total_seconds()

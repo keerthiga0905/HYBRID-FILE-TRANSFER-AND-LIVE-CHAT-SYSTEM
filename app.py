@@ -146,6 +146,12 @@ def get_logs():
     return jsonify({"logs": controller.get_activity_logs()})
 
 
+@app.route("/api/stats", methods=["GET"])
+def get_stats():
+    """Returns real-time network monitor metrics (throughput, latency RTT, packets, reliability)."""
+    return jsonify(controller.get_network_stats())
+
+
 if __name__ == "__main__":
     print(f"========================================")
     print(f"  HYBRID TRANSFER - PRODUCT WEB ENGINE")
