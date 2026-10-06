@@ -16,6 +16,8 @@ UDP_PORT = 6000
 # Buffer Sizes & Socket Config
 CHUNK_SIZE = 4096  # 4 KB chunk size for TCP file transfer
 MAX_UDP_PAYLOAD = 1024  # Standard safe size for UDP datagrams
+ACK_TIMEOUT = 1.0  # 1.0 second retransmission timeout for UDP ACKs
+MAX_RETRIES = 3  # Maximum retries before declaring UDP message dropped
 
 # File Storage Paths
 STORAGE_DIR = BASE_DIR / "storage"

@@ -1,6 +1,7 @@
 """
 UDP Client Module - Connectionless datagram socket client for UDP live chat, presence & heartbeat.
-Operates on Port 6000/UDP. Single socket receiver thread routes datagram responses cleanly.
+Includes Application-Layer Reliability: Sequence numbers, ACK tracking, 1s Timeout Retransmissions (3 retries max),
+and Duplicate Message Detection.
 """
 
 import json
@@ -8,13 +9,13 @@ import socket
 import threading
 import time
 from typing import Dict, Any, List, Optional
-from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD
+from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD, ACK_TIMEOUT, MAX_RETRIES
 from shared.utils import print_success, print_error, print_info, print_warning, get_timestamp
 
 
 class UDPClient:
     """
-    UDP Client managing datagram sending, thread-safe receiving, and presence heartbeat thread.
+    UDP Client implementing application-layer reliability over connectionless datagram sockets.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT, username: str = "Keerthi"):
@@ -29,7 +30,10 @@ class UDPClient:
         self.receiver_thread: threading.Thread | None = None
 
         self.messages_history: List[Dict[str, Any]] = []
+        self.pending_acks: Dict[int, Dict[str, Any]] = {}
+        self.processed_sequences: set = set()
         self.pending_responses: Dict[str, Dict[str, Any]] = {}
+
         self.seq_counter = 100
         self._lock = threading.Lock()
 
@@ -67,11 +71,30 @@ class UDPClient:
                     msg_type = payload.get("type", "")
 
                     with self._lock:
-                        if msg_type in ["JOIN_ACK", "USERS_LIST", "LEAVE_ACK", "ACK"]:
+                        if msg_type in ["JOIN_ACK", "USERS_LIST", "LEAVE_ACK"]:
                             self.pending_responses[msg_type] = payload
+
+                        elif msg_type == "ACK":
+                            seq = int(payload.get("sequence", 0))
+                            if seq in self.pending_acks:
+                                self.pending_acks[seq]["status"] = "DELIVERED"
+                                print_success(f"UDP ACK [{seq}] Received!")
+                                # Update history entry status
+                                for m in self.messages_history:
+                                    if m.get("sequence") == seq:
+                                        m["status"] = "Delivered"
+
                         elif msg_type == "BROADCAST":
+                            seq = int(payload.get("sequence", 0))
+
+                            # Duplicate message detection safeguard
+                            if seq in self.processed_sequences:
+                                print_warning(f"Duplicate UDP message [seq={seq}] detected - Ignored display.")
+                                continue
+
+                            self.processed_sequences.add(seq)
                             record = {
-                                "sequence": payload.get("sequence", 0),
+                                "sequence": seq,
                                 "sender": payload.get("sender", "Unknown"),
                                 "message": payload.get("message", ""),
                                 "timestamp": payload.get("timestamp", get_timestamp()),
@@ -108,7 +131,6 @@ class UDPClient:
             raw_bytes = json.dumps(join_payload).encode("utf-8")
             self.sock.sendto(raw_bytes, (self.host, self.port))
 
-            # Wait for receiver thread to catch JOIN_ACK response
             start_time = time.time()
             while time.time() - start_time < 3.0:
                 with self._lock:
@@ -128,7 +150,10 @@ class UDPClient:
             return None
 
     def send_chat_message(self, message_text: str) -> Dict[str, Any]:
-        """Sends a MSG UDP datagram to the server."""
+        """
+        Sends a MSG UDP datagram to the server with Application-Layer Reliability
+        (ACK tracking & retransmission handling).
+        """
         if not self.is_connected or not self.sock:
             return {"success": False, "error": "UDP Client is not connected"}
 
@@ -151,16 +176,85 @@ class UDPClient:
             "timestamp": get_timestamp()
         }
 
+        local_record = {
+            "sequence": seq,
+            "sender": self.username,
+            "message": text,
+            "timestamp": get_timestamp(),
+            "status": "Sent"
+        }
+
+        with self._lock:
+            self.messages_history.append(local_record)
+            self.pending_acks[seq] = {
+                "payload": msg_payload,
+                "retries": 0,
+                "status": "PENDING"
+            }
+
+        # Send initial datagram
         try:
             raw_bytes = json.dumps(msg_payload).encode("utf-8")
             self.sock.sendto(raw_bytes, (self.host, self.port))
-
             print_info(f"Sent UDP Chat MSG [seq={seq}]: '{text}'", tag="UDP")
-            return {"success": True, "sequence": seq, "message": text}
-
         except Exception as e:
             print_error(f"Error sending UDP message: {e}")
             return {"success": False, "error": str(e)}
+
+        # Launch retransmission timer thread for this message
+        retry_thread = threading.Thread(
+            target=self._retransmit_monitor,
+            args=(seq,),
+            daemon=True,
+            name=f"UDPRetryThread-{seq}"
+        )
+        retry_thread.start()
+
+        return {"success": True, "sequence": seq, "message": text}
+
+    def _retransmit_monitor(self, seq: int) -> None:
+        """
+        Monitors ACK status for `seq`. Retransmits after ACK_TIMEOUT (1s) up to MAX_RETRIES (3 times).
+        """
+        retries = 0
+        while retries < MAX_RETRIES:
+            time.sleep(ACK_TIMEOUT)
+
+            with self._lock:
+                if seq not in self.pending_acks:
+                    break
+
+                ack_info = self.pending_acks[seq]
+                if ack_info["status"] == "DELIVERED":
+                    break
+
+                # ACK timed out - Retransmit packet
+                retries += 1
+                ack_info["retries"] = retries
+                ack_info["status"] = "RETRYING"
+
+                # Update status in chat history
+                for m in self.messages_history:
+                    if m.get("sequence") == seq:
+                        m["status"] = f"Retrying ({retries}/{MAX_RETRIES})"
+
+                print_warning(f"UDP ACK Timeout for [seq={seq}]. Retransmitting attempt {retries}/{MAX_RETRIES}...")
+
+                try:
+                    if self.sock and self.is_connected:
+                        raw_bytes = json.dumps(ack_info["payload"]).encode("utf-8")
+                        self.sock.sendto(raw_bytes, (self.host, self.port))
+                except Exception as e:
+                    print_error(f"Retransmit error: {e}")
+
+        # Check final status after retries
+        with self._lock:
+            if seq in self.pending_acks and self.pending_acks[seq]["status"] != "DELIVERED":
+                self.pending_acks[seq]["status"] = "FAILED"
+                for m in self.messages_history:
+                    if m.get("sequence") == seq:
+                        m["status"] = "Delivery Failed"
+                print_error(f"UDP Delivery Failed for message [seq={seq}] after {MAX_RETRIES} retries.")
 
     def start_heartbeat(self, interval: float = 5.0) -> None:
         """Launches background thread sending HEARTBEAT datagrams every 5 seconds."""
@@ -175,7 +269,6 @@ class UDPClient:
             name="UDPHeartbeatThread"
         )
         self.heartbeat_thread.start()
-        print_info(f"UDP Presence Heartbeat thread started (Interval: {interval}s)", tag="UDP")
 
     def _heartbeat_loop(self, interval: float) -> None:
         """Loop running in daemon thread sending HEARTBEAT datagrams over main client socket."""
@@ -191,7 +284,6 @@ class UDPClient:
                 pass
 
             time.sleep(interval)
-
 
     def get_online_users(self) -> List[Dict[str, Any]]:
         """Sends GET_USERS UDP datagram to fetch online user list."""
@@ -236,3 +328,6 @@ class UDPClient:
         self.is_connected = False
         self.sock = None
         print_info("Left UDP Chat & Presence", tag="UDP")
+
+    disconnect = leave_chat
+    stop = leave_chat
