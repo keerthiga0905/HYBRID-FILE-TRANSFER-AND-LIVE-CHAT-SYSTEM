@@ -492,3 +492,31 @@ async function fetchNetworkStats() {
         console.warn('Fetch network stats error:', e);
     }
 }
+
+// Packet Loss Simulation Handlers
+function updateLossLabel(val) {
+    const lbl = document.getElementById('loss-label');
+    if (lbl) lbl.textContent = val + '%';
+}
+
+async function applyLossSimulation() {
+    const slider = document.getElementById('loss-slider');
+    const val = parseInt(slider ? slider.value : 0) || 0;
+    const rate = val / 100.0;
+
+    try {
+        const res = await fetch('/api/simulation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rate: rate })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert(`⚠️ Simulated UDP Packet Loss set to ${val}%.\nUDP datagrams will now experience artificial packet drops to demonstrate application-layer retransmission!`);
+            fetchLogs();
+            fetchNetworkStats();
+        }
+    } catch (e) {
+        alert('Error applying loss simulation: ' + e.message);
+    }
+}

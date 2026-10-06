@@ -35,7 +35,14 @@ class UDPClient:
         self.pending_responses: Dict[str, Dict[str, Any]] = {}
 
         self.seq_counter = 100
+        self.simulated_loss_rate = 0.0
         self._lock = threading.Lock()
+
+    def set_simulated_loss_rate(self, rate: float) -> None:
+        """Sets the client-side simulated packet loss rate."""
+        with self._lock:
+            self.simulated_loss_rate = max(0.0, min(0.5, rate))
+            print_warning(f"[SIMULATION] Client UDP Loss Rate set to {self.simulated_loss_rate * 100:.1f}%")
 
     def connect(self) -> bool:
         """Creates AF_INET SOCK_DGRAM UDP IPv4 socket."""

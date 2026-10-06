@@ -152,6 +152,15 @@ def get_stats():
     return jsonify(controller.get_network_stats())
 
 
+@app.route("/api/simulation", methods=["POST"])
+def set_simulation():
+    """Sets simulated UDP packet loss rate (e.g., 0.20 = 20% dropped packets)."""
+    data = request.json or {}
+    rate = data.get("rate", 0.0)
+    res = controller.set_simulated_loss(rate)
+    return jsonify(res)
+
+
 if __name__ == "__main__":
     print(f"========================================")
     print(f"  HYBRID TRANSFER - PRODUCT WEB ENGINE")

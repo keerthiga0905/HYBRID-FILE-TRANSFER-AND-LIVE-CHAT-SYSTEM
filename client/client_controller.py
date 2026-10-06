@@ -31,12 +31,23 @@ class ClientController:
         self.is_connected = False
         self.tcp_connected = False
         self.udp_connected = False
+        self.simulated_loss_rate = 0.0
 
         self.activity_logs: List[Dict[str, str]] = []
         self.transfer_history: List[Dict[str, Any]] = []
         self._lock = threading.Lock()
 
         self._add_log("INFO", "Application initialized in Product Mode")
+
+    def set_simulated_loss(self, rate: float) -> Dict[str, Any]:
+        """Sets simulated UDP packet loss percentage (0.0 to 0.5)."""
+        valid_rate = max(0.0, min(0.5, float(rate)))
+        self.simulated_loss_rate = valid_rate
+        if self.udp_client:
+            self.udp_client.set_simulated_loss_rate(valid_rate)
+        pct = valid_rate * 100.0
+        self._add_log("WARN" if valid_rate > 0 else "INFO", f"Simulated UDP Packet Loss set to {pct:.1f}%")
+        return {"success": True, "simulated_loss_rate": valid_rate, "loss_percentage": pct}
 
     def _add_log(self, level: str, message: str) -> None:
         with self._lock:

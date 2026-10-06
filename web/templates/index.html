@@ -280,6 +280,28 @@
                         </div>
                         <div class="node">SERVER <br><small id="net-server-ip">127.0.0.1</small></div>
                     </div>
+
+                    <!-- Packet Loss Simulation Panel -->
+                    <div class="section-block" style="margin-top: 24px;">
+                        <h3>⚠️ Network Diagnostics & Packet Loss Simulator</h3>
+                        <p class="subtitle">Simulate lossy network environments to test UDP application-layer ACK retransmission & duplicate rejection.</p>
+                        
+                        <div class="stat-card" style="padding: 20px;">
+                            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;">
+                                <div>
+                                    <strong style="font-size: 16px;">Simulated UDP Packet Loss Rate</strong>
+                                    <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">
+                                        Artificially drops incoming/outgoing UDP datagrams to trigger 1s timeout retransmissions.
+                                    </div>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <input type="range" id="loss-slider" min="0" max="50" value="0" step="5" oninput="updateLossLabel(this.value)" style="width: 160px;">
+                                    <span id="loss-label" style="font-weight: bold; width: 50px;">0%</span>
+                                    <button class="btn btn-primary btn-sm" onclick="applyLossSimulation()">Apply Loss Rate</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </section>
 
                 <!-- STATISTICS PAGE -->

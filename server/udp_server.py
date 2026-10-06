@@ -4,11 +4,12 @@ Operates on Port 6000/UDP. Manages UDP datagram receipt, chat broadcast, and pre
 """
 
 import json
+import random
 import socket
 import threading
 import time
 from typing import Dict, Any
-from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD
+from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD, DEFAULT_SIMULATED_LOSS_RATE
 from shared.utils import print_info, print_success, print_error, print_warning, get_timestamp
 from server.logger import log_event
 from server.client_registry import registry
@@ -17,6 +18,7 @@ from server.client_registry import registry
 class UDPServer:
     """
     UDP Server implementing connectionless datagram socket handling & chat message broadcasting.
+    Supports simulated packet loss mode for reliability demonstration.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT):
@@ -26,6 +28,13 @@ class UDPServer:
         self.is_running = False
         self._lock = threading.Lock()
         self.message_counter = 100
+        self.simulated_loss_rate = DEFAULT_SIMULATED_LOSS_RATE
+
+    def set_simulated_loss_rate(self, rate: float) -> None:
+        """Sets the simulated packet loss rate (0.0 = 0% to 0.5 = 50%)."""
+        with self._lock:
+            self.simulated_loss_rate = max(0.0, min(0.5, rate))
+            print_warning(f"[SIMULATION] UDP Packet Loss Rate set to {self.simulated_loss_rate * 100:.1f}%")
 
     def start(self) -> None:
         """Initializes UDP IPv4 socket, binds to port 6000, and launches receive loop."""
@@ -55,6 +64,17 @@ class UDPServer:
             try:
                 data, addr = self.udp_socket.recvfrom(MAX_UDP_PAYLOAD)
                 if not data:
+                    continue
+
+                # Simulated Packet Loss Mode Safeguard
+                if self.simulated_loss_rate > 0.0 and random.random() < self.simulated_loss_rate:
+                    print_warning(f"[SIMULATED LOSS] Artificially dropped incoming UDP packet from {addr}!")
+                    log_event(f"[SIMULATED LOSS] Dropped UDP datagram from {addr}")
+                    try:
+                        from shared.stats import global_stats
+                        global_stats.record_udp_failure()
+                    except Exception:
+                        pass
                     continue
 
                 try:
