@@ -1,7 +1,7 @@
 /* 
    HYBRID TRANSFER - Product UI Controller Script
    Handles Navigation, Connection Management, API Interactivity, Real-time Backend Sync,
-   File Listing, TCP Upload, TCP Download, and Transfer History.
+   File Listing, TCP Upload, TCP Download, UDP Presence, and Online Users Registry.
 */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -42,6 +42,8 @@ function switchTab(tabId) {
         fetchFilesList();
     } else if (tabId === 'transfers') {
         fetchTransfers();
+    } else if (tabId === 'chat') {
+        fetchOnlineUsers();
     } else if (tabId === 'activity') {
         fetchLogs();
     }
@@ -89,6 +91,7 @@ async function performConnection() {
             closeConnectModal();
             updateUIState(data);
             fetchFilesList();
+            fetchOnlineUsers();
             fetchLogs();
         } else {
             errBox.textContent = data.error || 'Connection failed';
@@ -109,6 +112,9 @@ async function checkBackendStatus() {
         const response = await fetch('/api/status');
         const status = await response.json();
         updateUIState(status);
+        if (currentTab === 'chat' || currentTab === 'dashboard') {
+            fetchOnlineUsers();
+        }
     } catch (e) {
         console.warn('Backend status check error:', e);
     }
@@ -123,6 +129,7 @@ function updateUIState(status) {
     if (userName) userName.textContent = status.username || 'Keerthi';
     if (userGreeting) userGreeting.textContent = status.username || 'Keerthi';
 
+    // TCP Pill & Dashboard Status
     const tcpPill = document.getElementById('pill-tcp');
     const dashTcpVal = document.getElementById('dash-tcp-val');
     const footerTcpTxt = document.getElementById('footer-tcp-txt');
@@ -150,6 +157,64 @@ function updateUIState(status) {
         }
         if (footerTcpTxt) footerTcpTxt.textContent = 'Disconnected';
         if (footerTcpDot) footerTcpDot.className = 'dot offline';
+    }
+
+    // UDP Pill & Dashboard Status
+    const udpPill = document.getElementById('pill-udp');
+    const dashUdpVal = document.getElementById('dash-udp-val');
+    const footerUdpTxt = document.getElementById('footer-udp-txt');
+    const footerUdpDot = document.getElementById('footer-udp-dot');
+
+    if (status.udp_connected) {
+        if (udpPill) {
+            udpPill.className = 'pill online';
+            udpPill.querySelector('.pill-status').textContent = 'Connected';
+        }
+        if (dashUdpVal) {
+            dashUdpVal.className = 'stat-value status-text online';
+            dashUdpVal.textContent = 'CONNECTED';
+        }
+        if (footerUdpTxt) footerUdpTxt.textContent = 'Connected';
+        if (footerUdpDot) footerUdpDot.className = 'dot online';
+    } else {
+        if (udpPill) {
+            udpPill.className = 'pill offline';
+            udpPill.querySelector('.pill-status').textContent = 'Offline';
+        }
+        if (dashUdpVal) {
+            dashUdpVal.className = 'stat-value status-text offline';
+            dashUdpVal.textContent = 'OFFLINE';
+        }
+        if (footerUdpTxt) footerUdpTxt.textContent = 'Disconnected';
+        if (footerUdpDot) footerUdpDot.className = 'dot offline';
+    }
+}
+
+// Fetch Online Users (UDP Presence)
+async function fetchOnlineUsers() {
+    try {
+        const res = await fetch('/api/users');
+        const data = await res.json();
+        const usersList = document.getElementById('online-users-list');
+        const dashOnlineVal = document.getElementById('dash-online-val');
+
+        if (data.users) {
+            const onlineCount = data.users.filter(u => u.status === 'ONLINE').length;
+            if (dashOnlineVal) dashOnlineVal.textContent = onlineCount;
+
+            if (usersList) {
+                usersList.innerHTML = '';
+                data.users.forEach(u => {
+                    const isOnline = u.status === 'ONLINE';
+                    const div = document.createElement('div');
+                    div.className = 'user-row';
+                    div.innerHTML = `<span class="dot ${isOnline ? 'online' : 'offline'}">●</span> ${u.username} <small style="color:var(--text-muted); margin-left:auto;">${u.status}</small>`;
+                    usersList.appendChild(div);
+                });
+            }
+        }
+    } catch (e) {
+        console.warn('Fetch online users error:', e);
     }
 }
 

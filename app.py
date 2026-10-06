@@ -35,7 +35,7 @@ def get_status():
 
 @app.route("/api/connect", methods=["POST"])
 def connect_server():
-    """Triggers real Python TCP connection via ClientController."""
+    """Triggers real Python TCP & UDP connections via ClientController."""
     data = request.json or {}
     host = data.get("host", DEFAULT_HOST)
     tcp_port = data.get("tcp_port", TCP_PORT)
@@ -99,6 +99,13 @@ def download_file():
 
     res = controller.download_file(filename, resume=resume)
     return jsonify(res)
+
+
+@app.route("/api/users", methods=["GET"])
+def get_users():
+    """Returns list of online users from UDP server presence registry."""
+    users = controller.get_online_users()
+    return jsonify({"users": users})
 
 
 @app.route("/api/partials", methods=["GET"])

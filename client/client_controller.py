@@ -1,6 +1,6 @@
 """
 Client Controller - Manages real Python TCP and UDP Socket Clients for the Product UI.
-Maintains state, connection status, real transfer history, partial file resume status, runtime statistics, and activity logs.
+Maintains state, TCP/UDP connection status, real transfer history, partial file resume status, online user registry, and activity logs.
 """
 
 import threading
@@ -10,11 +10,12 @@ from typing import Dict, Any, List, Optional
 from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT, DOWNLOADS_DIR, UPLOADS_DIR
 from shared.utils import get_timestamp
 from client.tcp_client import TCPClient
+from client.udp_client import UDPClient
 
 
 class ClientController:
     """
-    Controller singleton bridging the Product Web Interface to actual Python TCP/UDP sockets.
+    Controller singleton bridging the Product Web Interface to actual Python TCP and UDP sockets.
     Triggers real socket methods on TCPClient & UDPClient.
     """
 
@@ -25,6 +26,8 @@ class ClientController:
         self.username = "Keerthi"
 
         self.tcp_client: TCPClient | None = None
+        self.udp_client: UDPClient | None = None
+
         self.is_connected = False
         self.tcp_connected = False
         self.udp_connected = False
@@ -47,7 +50,7 @@ class ClientController:
                 self.activity_logs.pop(0)
 
     def connect(self, host: str, tcp_port: int, udp_port: int, username: str) -> Dict[str, Any]:
-        """Connects to the server using REAL Python TCP socket."""
+        """Connects to the server using REAL Python TCP and UDP sockets."""
         self.server_host = host.strip() or DEFAULT_HOST
         self.tcp_port = int(tcp_port)
         self.udp_port = int(udp_port)
@@ -55,32 +58,45 @@ class ClientController:
 
         self._add_log("TCP", f"Initiating TCP connection to {self.server_host}:{self.tcp_port}...")
 
+        # Step 1: Connect TCP Socket
         self.tcp_client = TCPClient(host=self.server_host, port=self.tcp_port)
-        connected = self.tcp_client.connect()
+        tcp_ok = self.tcp_client.connect()
 
-        if connected:
+        if tcp_ok:
             resp = self.tcp_client.send_hello(client_name=self.username)
             if resp and resp.get("status") == "SUCCESS":
                 self.tcp_connected = True
                 self.is_connected = True
                 self._add_log("SUCCESS", f"TCP Connection Established! Server ACK: {resp.get('message')}")
-                return {
-                    "success": True,
-                    "message": "Connected to HYBRID TRANSFER Server",
-                    "server_host": self.server_host,
-                    "tcp_port": self.tcp_port,
-                    "udp_port": self.udp_port,
-                    "username": self.username,
-                    "tcp_connected": True,
-                    "udp_connected": False
-                }
             else:
                 self.tcp_client.disconnect()
-                self._add_log("ERROR", "Handshake failed or unexpected response from server")
-                return {"success": False, "error": "Server handshake failed"}
+                self._add_log("ERROR", "TCP Handshake failed")
+                return {"success": False, "error": "TCP Server handshake failed"}
         else:
-            self._add_log("ERROR", f"Could not connect to {self.server_host}:{self.tcp_port}")
-            return {"success": False, "error": f"Failed to connect to {self.server_host}:{self.tcp_port}"}
+            self._add_log("ERROR", f"Could not connect to TCP {self.server_host}:{self.tcp_port}")
+            return {"success": False, "error": f"Failed to connect to TCP Server at {self.server_host}:{self.tcp_port}"}
+
+        # Step 2: Connect & Join UDP Socket
+        self._add_log("UDP", f"Initiating UDP socket for {self.server_host}:{self.udp_port}...")
+        self.udp_client = UDPClient(host=self.server_host, port=self.udp_port, username=self.username)
+        if self.udp_client.connect():
+            udp_resp = self.udp_client.join_chat(self.username)
+            if udp_resp:
+                self.udp_connected = True
+                self._add_log("SUCCESS", f"UDP Chat & Presence Joined! Started 5s Heartbeat Thread.")
+            else:
+                self._add_log("WARN", "UDP Join request timed out (Server may not have UDP enabled yet)")
+
+        return {
+            "success": True,
+            "message": "Connected to HYBRID TRANSFER Server",
+            "server_host": self.server_host,
+            "tcp_port": self.tcp_port,
+            "udp_port": self.udp_port,
+            "username": self.username,
+            "tcp_connected": self.tcp_connected,
+            "udp_connected": self.udp_connected
+        }
 
     def list_files(self) -> List[Dict[str, Any]]:
         """Lists files available on server over TCP socket."""
@@ -93,7 +109,7 @@ class ClientController:
     def upload_file(self, filepath: str, resume: bool = False) -> Dict[str, Any]:
         """Performs streaming TCP file upload to server."""
         if not self.tcp_connected or not self.tcp_client:
-            return {"success": False, "error": "Not connected to server"}
+            return {"success": False, "error": "Not connected to TCP server"}
 
         mode_str = "RESUME Upload" if resume else "Upload"
         self._add_log("TCP", f"Starting TCP {mode_str} for '{filepath}'...")
@@ -122,7 +138,7 @@ class ClientController:
     def download_file(self, filename: str, resume: bool = False) -> Dict[str, Any]:
         """Performs streaming TCP file download from server."""
         if not self.tcp_connected or not self.tcp_client:
-            return {"success": False, "error": "Not connected to server"}
+            return {"success": False, "error": "Not connected to TCP server"}
 
         mode_str = "RESUME Download" if resume else "Download"
         self._add_log("TCP", f"Starting TCP {mode_str} for '{filename}'...")
@@ -148,13 +164,22 @@ class ClientController:
 
         return res
 
+    def get_online_users(self) -> List[Dict[str, Any]]:
+        """Returns list of online users from UDP server presence registry."""
+        if self.udp_client and self.udp_connected:
+            users = self.udp_client.get_online_users()
+            if users:
+                return users
+        # Fallback to local user
+        return [{"username": self.username, "endpoint": "127.0.0.1", "status": "ONLINE", "last_seen": get_timestamp()}]
+
     def list_partial_files(self) -> List[Dict[str, Any]]:
         """Lists partial .part files available for transfer resume."""
         partials = []
         if DOWNLOADS_DIR.exists():
             for item in DOWNLOADS_DIR.iterdir():
                 if item.is_file() and item.name.endswith(".part"):
-                    clean_name = item.name[:-5]  # Strip .part
+                    clean_name = item.name[:-5]
                     partials.append({
                         "filename": clean_name,
                         "type": "Download",
@@ -168,10 +193,14 @@ class ClientController:
             return list(self.transfer_history)
 
     def disconnect(self) -> Dict[str, Any]:
-        """Closes TCP connection."""
+        """Closes TCP and UDP sockets cleanly."""
         if self.tcp_client:
             self.tcp_client.disconnect()
             self.tcp_client = None
+
+        if self.udp_client:
+            self.udp_client.leave_chat()
+            self.udp_client = None
 
         self.tcp_connected = False
         self.udp_connected = False
@@ -184,7 +213,7 @@ class ClientController:
         return {
             "is_connected": self.is_connected,
             "tcp_connected": self.tcp_connected and (self.tcp_client.is_connected if self.tcp_client else False),
-            "udp_connected": self.udp_connected,
+            "udp_connected": self.udp_connected and (self.udp_client.is_connected if self.udp_client else False),
             "server_host": self.server_host,
             "tcp_port": self.tcp_port,
             "udp_port": self.udp_port,
