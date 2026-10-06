@@ -1,6 +1,6 @@
 """
 TCP Client Module - Handles TCP connection lifecycle, framed message processing,
-and streaming file uploads/downloads with SHA-256 integrity verification.
+streaming file uploads/downloads, and interrupted transfer RESUME recovery with SHA-256 verification.
 """
 
 import os
@@ -12,12 +12,12 @@ from shared.config import DEFAULT_HOST, TCP_PORT, CHUNK_SIZE
 from shared.protocol import send_message, receive_message
 from shared.checksum import calculate_sha256, verify_checksum
 from shared.utils import print_success, print_error, print_info
-from client.file_manager import get_safe_download_path, sanitize_filename
+from client.file_manager import get_safe_download_path, sanitize_filename, DOWNLOADS_DIR
 
 
 class TCPClient:
     """
-    TCP Client managing socket connection to the TCP Server for file transfers.
+    TCP Client managing socket connection to the TCP Server for file transfers and resumes.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = TCP_PORT):
@@ -74,9 +74,10 @@ class TCPClient:
             print_error(f"Error fetching file list: {e}")
             return None
 
-    def upload_file(self, file_path_str: str, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+    def upload_file(self, file_path_str: str, resume: bool = False, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
         """
         Streams file upload to server in 4096-byte chunks over TCP.
+        Supports resuming partial uploads starting from server-acknowledged byte offset.
         Calculates client SHA-256 and verifies server SHA-256 result.
         """
         if not self.is_connected or not self.sock:
@@ -89,12 +90,12 @@ class TCPClient:
         filename = sanitize_filename(file_path.name)
         filesize = file_path.stat().st_size
 
-        print_info(f"Calculating SHA-256 for '{filename}'...", tag="TCP")
+        print_info(f"Calculating full file SHA-256 for '{filename}'...", tag="TCP")
         client_checksum = calculate_sha256(file_path)
 
-        # Step 1: Send UPLOAD metadata
+        cmd = "RESUME_UPLOAD" if resume else "UPLOAD"
         upload_req = {
-            "command": "UPLOAD",
+            "command": cmd,
             "filename": filename,
             "filesize": filesize,
             "checksum": client_checksum
@@ -107,21 +108,25 @@ class TCPClient:
             if not ready_resp or ready_resp.get("status") != "READY":
                 return {"success": False, "error": f"Server rejected upload: {ready_resp}"}
 
-            # Step 2: Stream binary chunks over TCP
-            print_info(f"Streaming '{filename}' ({filesize} bytes) in 4KB chunks...", tag="TCP")
-            sent_bytes = 0
+            offset = int(ready_resp.get("offset", 0)) if resume else 0
+
+            print_info(f"Streaming '{filename}' from byte offset {offset}/{filesize} in 4KB chunks...", tag="TCP")
+            sent_bytes = offset
             start_time = datetime.now()
 
             with open(file_path, "rb") as f:
+                if offset > 0:
+                    f.seek(offset)
+
                 while chunk := f.read(CHUNK_SIZE):
                     self.sock.sendall(chunk)
                     sent_bytes += len(chunk)
                     if progress_callback:
                         elapsed = (datetime.now() - start_time).total_seconds()
-                        speed = (sent_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                        speed = ((sent_bytes - offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
                         progress_callback(sent_bytes, filesize, speed)
 
-            # Step 3: Receive server verification response
+            # Receive server verification response
             result = receive_message(self.sock)
             if result and result.get("checksum_verified"):
                 print_success(f"File '{filename}' uploaded successfully! SHA-256 verified.")
@@ -129,6 +134,7 @@ class TCPClient:
                     "success": True,
                     "filename": filename,
                     "filesize": filesize,
+                    "offset_resumed": offset,
                     "client_checksum": client_checksum,
                     "server_checksum": result.get("server_checksum"),
                     "checksum_verified": True
@@ -145,9 +151,10 @@ class TCPClient:
             print_error(f"Error during TCP file upload: {e}")
             return {"success": False, "error": str(e)}
 
-    def download_file(self, filename: str, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+    def download_file(self, filename: str, resume: bool = False, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
         """
         Streams file download from server in 4096-byte chunks over TCP into storage/downloads/.
+        Supports resuming partial downloads starting from local .part file size.
         Verifies SHA-256 integrity after receipt.
         """
         if not self.is_connected or not self.sock:
@@ -157,8 +164,12 @@ class TCPClient:
         dest_path = get_safe_download_path(clean_name)
         part_path = dest_path.parent / (dest_path.name + ".part")
 
+        offset = 0
+        if resume and part_path.exists() and part_path.is_file():
+            offset = part_path.stat().st_size
 
-        download_req = {"command": "DOWNLOAD", "filename": clean_name}
+        cmd = "RESUME_DOWNLOAD" if resume and offset > 0 else "DOWNLOAD"
+        download_req = {"command": cmd, "filename": clean_name, "offset": offset}
 
         try:
             send_message(self.sock, download_req)
@@ -170,11 +181,13 @@ class TCPClient:
             filesize = int(metadata.get("filesize", 0))
             expected_checksum = metadata.get("checksum", "")
 
-            print_info(f"Downloading '{clean_name}' ({filesize} bytes)...", tag="TCP")
-            received_bytes = 0
+            mode = "ab" if resume and offset > 0 else "wb"
+            received_bytes = offset if resume and offset > 0 else 0
+
+            print_info(f"Downloading '{clean_name}' starting from byte offset {received_bytes}/{filesize}...", tag="TCP")
             start_time = datetime.now()
 
-            with open(part_path, "wb") as f:
+            with open(part_path, mode) as f:
                 while received_bytes < filesize:
                     remaining = filesize - received_bytes
                     to_read = min(CHUNK_SIZE, remaining)
@@ -188,7 +201,7 @@ class TCPClient:
 
                     if progress_callback:
                         elapsed = (datetime.now() - start_time).total_seconds()
-                        speed = (received_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                        speed = ((received_bytes - offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
                         progress_callback(received_bytes, filesize, speed)
 
             # Compute SHA-256 on downloaded file
@@ -204,13 +217,13 @@ class TCPClient:
                     "success": True,
                     "filename": clean_name,
                     "filesize": filesize,
+                    "offset_resumed": offset,
                     "download_path": str(dest_path),
                     "checksum": actual_checksum,
                     "checksum_verified": True
                 }
             else:
-                if part_path.exists():
-                    part_path.unlink()
+                # Keep partial file for future resume attempt, but return error
                 print_error(f"Downloaded file '{clean_name}' failed checksum verification!")
                 return {
                     "success": False,
@@ -219,8 +232,6 @@ class TCPClient:
                 }
 
         except Exception as e:
-            if part_path.exists():
-                part_path.unlink()
             print_error(f"Error downloading file: {e}")
             return {"success": False, "error": str(e)}
 

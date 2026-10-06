@@ -1,12 +1,13 @@
 """
 Client Controller - Manages real Python TCP and UDP Socket Clients for the Product UI.
-Maintains state, connection status, real transfer history, runtime statistics, and activity logs.
+Maintains state, connection status, real transfer history, partial file resume status, runtime statistics, and activity logs.
 """
 
 import threading
 import time
+from pathlib import Path
 from typing import Dict, Any, List, Optional
-from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT
+from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT, DOWNLOADS_DIR, UPLOADS_DIR
 from shared.utils import get_timestamp
 from client.tcp_client import TCPClient
 
@@ -89,20 +90,22 @@ class ClientController:
         self._add_log("TCP", f"Fetched file repository list: {len(files)} files found")
         return files
 
-    def upload_file(self, filepath: str) -> Dict[str, Any]:
+    def upload_file(self, filepath: str, resume: bool = False) -> Dict[str, Any]:
         """Performs streaming TCP file upload to server."""
         if not self.tcp_connected or not self.tcp_client:
             return {"success": False, "error": "Not connected to server"}
 
-        self._add_log("TCP", f"Starting TCP file upload for '{filepath}'...")
-        res = self.tcp_client.upload_file(filepath)
+        mode_str = "RESUME Upload" if resume else "Upload"
+        self._add_log("TCP", f"Starting TCP {mode_str} for '{filepath}'...")
+        res = self.tcp_client.upload_file(filepath, resume=resume)
 
         record = {
             "timestamp": get_timestamp(),
             "filename": res.get("filename", filepath),
-            "direction": "Upload",
+            "direction": "Upload (Resumed)" if resume else "Upload",
             "protocol": "TCP",
             "size": res.get("filesize", 0),
+            "offset_resumed": res.get("offset_resumed", 0),
             "status": "Completed" if res.get("success") else "Failed",
             "checksum_verified": res.get("checksum_verified", False)
         }
@@ -116,20 +119,22 @@ class ClientController:
 
         return res
 
-    def download_file(self, filename: str) -> Dict[str, Any]:
+    def download_file(self, filename: str, resume: bool = False) -> Dict[str, Any]:
         """Performs streaming TCP file download from server."""
         if not self.tcp_connected or not self.tcp_client:
             return {"success": False, "error": "Not connected to server"}
 
-        self._add_log("TCP", f"Starting TCP file download for '{filename}'...")
-        res = self.tcp_client.download_file(filename)
+        mode_str = "RESUME Download" if resume else "Download"
+        self._add_log("TCP", f"Starting TCP {mode_str} for '{filename}'...")
+        res = self.tcp_client.download_file(filename, resume=resume)
 
         record = {
             "timestamp": get_timestamp(),
             "filename": filename,
-            "direction": "Download",
+            "direction": "Download (Resumed)" if resume else "Download",
             "protocol": "TCP",
             "size": res.get("filesize", 0),
+            "offset_resumed": res.get("offset_resumed", 0),
             "status": "Completed" if res.get("success") else "Failed",
             "checksum_verified": res.get("checksum_verified", False)
         }
@@ -142,6 +147,21 @@ class ClientController:
             self._add_log("ERROR", f"Download failed for '{filename}': {res.get('error')}")
 
         return res
+
+    def list_partial_files(self) -> List[Dict[str, Any]]:
+        """Lists partial .part files available for transfer resume."""
+        partials = []
+        if DOWNLOADS_DIR.exists():
+            for item in DOWNLOADS_DIR.iterdir():
+                if item.is_file() and item.name.endswith(".part"):
+                    clean_name = item.name[:-5]  # Strip .part
+                    partials.append({
+                        "filename": clean_name,
+                        "type": "Download",
+                        "bytes_received": item.stat().st_size,
+                        "part_path": str(item)
+                    })
+        return partials
 
     def get_transfers(self) -> List[Dict[str, Any]]:
         with self._lock:

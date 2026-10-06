@@ -1,6 +1,6 @@
 """
 TCP Server Module - Handles reliable connection-oriented communication.
-Multithreaded client handler supporting TCP File Upload, Download, List, and framed JSON protocol.
+Multithreaded client handler supporting TCP File Upload, Download, List, RESUME, and framed JSON protocol.
 """
 
 import socket
@@ -11,12 +11,17 @@ from shared.protocol import receive_message, send_message
 from shared.checksum import calculate_sha256
 from shared.utils import print_info, print_success, print_error, print_warning
 from server.logger import log_event
-from server.file_manager import list_upload_files, save_upload_stream, get_safe_upload_path
+from server.file_manager import (
+    list_upload_files,
+    save_upload_stream,
+    get_safe_upload_path,
+    get_partial_file_offset
+)
 
 
 class TCPServer:
     """
-    Multithreaded TCP Server for reliable connection-oriented file transfers.
+    Multithreaded TCP Server for reliable connection-oriented file transfers & resumes.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = TCP_PORT):
@@ -92,7 +97,6 @@ class TCPServer:
                     continue
 
                 if msg is None:
-                    # Client disconnected cleanly
                     break
 
                 cmd = msg.get("command", "").upper()
@@ -116,45 +120,47 @@ class TCPServer:
                     files_list = list_upload_files()
                     print_info(f"File LIST requested by {addr_str} ({len(files_list)} files found)", tag="TCP")
                     log_event(f"File list sent to {addr_str}: {len(files_list)} files")
-                    response = {
-                        "status": "SUCCESS",
-                        "command": "LIST_ACK",
-                        "files": files_list
-                    }
-                    send_message(client_sock, response)
+                    send_message(client_sock, {"status": "SUCCESS", "command": "LIST_ACK", "files": files_list})
 
-                elif cmd == "UPLOAD":
+                elif cmd in ["UPLOAD", "RESUME_UPLOAD"]:
                     filename = msg.get("filename", "")
                     filesize = int(msg.get("filesize", 0))
                     client_checksum = msg.get("checksum", "")
 
-                    print_info(f"UPLOAD request: {filename} ({filesize} bytes)", tag="TCP")
-                    log_event(f"Upload initiated from {addr_str}: {filename}, {filesize} bytes")
+                    # Check for existing partial file offset
+                    existing_offset = get_partial_file_offset(filename) if cmd == "RESUME_UPLOAD" else 0
+
+                    print_info(f"{cmd} request: {filename} ({filesize} bytes, offset={existing_offset})", tag="TCP")
+                    log_event(f"{cmd} initiated from {addr_str}: {filename}, offset={existing_offset}")
 
                     try:
-                        # Security check & ready ACK
-                        safe_path = get_safe_upload_path(filename)
-                        send_message(client_sock, {"status": "READY", "message": "Server ready to receive stream"})
+                        get_safe_upload_path(filename)
+                        send_message(client_sock, {
+                            "status": "READY",
+                            "message": "Server ready for upload stream",
+                            "offset": existing_offset
+                        })
 
-                        # Stream file chunks and verify SHA-256
-                        result = save_upload_stream(client_sock, filename, filesize, client_checksum)
+                        result = save_upload_stream(client_sock, filename, filesize, client_checksum, offset=existing_offset)
                         send_message(client_sock, result)
 
                         if result.get("checksum_verified"):
-                            print_success(f"Upload completed & SHA-256 verified: {filename}")
-                            log_event(f"Upload completed successfully: {filename}")
+                            print_success(f"Upload/Resume completed & SHA-256 verified: {filename}")
+                            log_event(f"Upload/Resume completed successfully: {filename}")
                         else:
-                            print_error(f"Upload checksum failed for {filename}")
-                            log_event(f"Upload checksum failure: {filename}", "error")
+                            print_error(f"Upload/Resume checksum failed for {filename}")
+                            log_event(f"Upload/Resume checksum failure: {filename}", "error")
 
                     except ValueError as ve:
                         print_error(f"Upload rejected (Path Traversal): {ve}")
                         send_message(client_sock, {"status": "ERROR", "message": str(ve)})
 
-                elif cmd == "DOWNLOAD":
+                elif cmd in ["DOWNLOAD", "RESUME_DOWNLOAD"]:
                     filename = msg.get("filename", "")
-                    print_info(f"DOWNLOAD request: {filename}", tag="TCP")
-                    log_event(f"Download requested from {addr_str}: {filename}")
+                    requested_offset = int(msg.get("offset", 0))
+
+                    print_info(f"{cmd} request: {filename} (offset={requested_offset})", tag="TCP")
+                    log_event(f"{cmd} requested from {addr_str}: {filename}, offset={requested_offset}")
 
                     try:
                         file_path = get_safe_upload_path(filename)
@@ -163,22 +169,30 @@ class TCPServer:
                             print_warning(f"Download request failed: File '{filename}' not found")
                         else:
                             filesize = file_path.stat().st_size
+
+                            if requested_offset < 0 or requested_offset >= filesize:
+                                send_message(client_sock, {"status": "INVALID_OFFSET", "message": f"Requested offset {requested_offset} invalid for filesize {filesize}"})
+                                continue
+
                             checksum = calculate_sha256(file_path)
 
-                            # Send ready metadata header
+                            # Send ready metadata header with offset acknowledgment
                             send_message(client_sock, {
                                 "status": "READY",
                                 "filename": file_path.name,
                                 "filesize": filesize,
+                                "offset": requested_offset,
                                 "checksum": checksum
                             })
 
-                            # Stream binary chunks over TCP
+                            # Stream remaining binary chunks starting from requested_offset over TCP
                             with open(file_path, "rb") as f:
+                                if requested_offset > 0:
+                                    f.seek(requested_offset)
                                 while chunk := f.read(CHUNK_SIZE):
                                     client_sock.sendall(chunk)
 
-                            print_success(f"Streamed {filename} ({filesize} bytes) to client {addr_str}")
+                            print_success(f"Streamed {filename} ({filesize - requested_offset} bytes from offset {requested_offset}) to client {addr_str}")
                             log_event(f"Download completed for {addr_str}: {filename}")
 
                     except ValueError as ve:

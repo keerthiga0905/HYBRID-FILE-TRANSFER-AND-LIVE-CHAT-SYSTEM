@@ -220,3 +220,59 @@
 [11:28:20] [TCPClientHandler-53236] INFO: HELLO received from PostErrorCheck (127.0.0.1:53236)
 [11:28:20] [TCPClientHandler-53236] INFO: TCP Client disconnected: 127.0.0.1:53236
 [11:28:20] [MainThread] INFO: TCP Server stopped
+[11:29:57] [TCPClientHandler-64811] INFO: TCP Client disconnected: 127.0.0.1:64811
+[11:29:57] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:49224
+[11:29:57] [TCPClientHandler-49224] INFO: HELLO received from Keerthi (127.0.0.1:49224)
+[11:29:57] [TCPClientHandler-49224] INFO: HELLO response sent to 127.0.0.1:49224
+[11:30:10] [TCPClientHandler-49224] INFO: TCP Client disconnected: 127.0.0.1:49224
+[11:30:24] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57614
+[11:30:24] [TCPClientHandler-57614] INFO: HELLO received from Keerthi (127.0.0.1:57614)
+[11:30:24] [TCPClientHandler-57614] INFO: HELLO response sent to 127.0.0.1:57614
+[11:33:46] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5003
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57494
+[11:33:46] [TCPClientHandler-57494] INFO: HELLO received from Uploader (127.0.0.1:57494)
+[11:33:46] [TCPClientHandler-57494] INFO: UPLOAD initiated from 127.0.0.1:57494: sample_test_1mb.dat, offset=0
+[11:33:46] [TCPClientHandler-57494] INFO: Upload/Resume completed successfully: sample_test_1mb.dat
+[11:33:46] [TCPClientHandler-57494] INFO: TCP Client disconnected: 127.0.0.1:57494
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57495
+[11:33:46] [TCPClientHandler-57495] INFO: HELLO received from Lister (127.0.0.1:57495)
+[11:33:46] [TCPClientHandler-57495] INFO: File list sent to 127.0.0.1:57495: 1 files
+[11:33:46] [TCPClientHandler-57495] INFO: TCP Client disconnected: 127.0.0.1:57495
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57496
+[11:33:46] [TCPClientHandler-57496] INFO: HELLO received from Downloader (127.0.0.1:57496)
+[11:33:46] [TCPClientHandler-57496] INFO: DOWNLOAD requested from 127.0.0.1:57496: sample_test_1mb.dat, offset=0
+[11:33:46] [TCPClientHandler-57496] INFO: Download completed for 127.0.0.1:57496: sample_test_1mb.dat
+[11:33:46] [TCPClientHandler-57496] INFO: TCP Client disconnected: 127.0.0.1:57496
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57497
+[11:33:46] [TCPClientHandler-57497] INFO: DOWNLOAD requested from 127.0.0.1:57497: secret.txt, offset=0
+[11:33:46] [TCPClientHandler-57497] INFO: TCP Client disconnected: 127.0.0.1:57497
+[11:33:46] [MainThread] INFO: TCP Server stopped
+[11:33:46] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5004
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57504
+[11:33:46] [TCPClientHandler-57504] INFO: HELLO received from ResumeUploader (127.0.0.1:57504)
+[11:33:46] [TCPClientHandler-57504] INFO: RESUME_UPLOAD initiated from 127.0.0.1:57504: resume_test_2mb.dat, offset=1048576
+[11:33:46] [TCPClientHandler-57504] INFO: Upload/Resume completed successfully: resume_test_2mb.dat
+[11:33:46] [TCPClientHandler-57504] INFO: TCP Client disconnected: 127.0.0.1:57504
+[11:33:46] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57505
+[11:33:46] [TCPClientHandler-57505] INFO: HELLO received from ResumeDownloader (127.0.0.1:57505)
+[11:33:46] [TCPClientHandler-57505] INFO: RESUME_DOWNLOAD requested from 127.0.0.1:57505: resume_test_2mb.dat, offset=1048576
+[11:33:46] [TCPClientHandler-57505] INFO: Download completed for 127.0.0.1:57505: resume_test_2mb.dat
+[11:33:46] [MainThread] INFO: TCP Server stopped
+[11:33:46] [TCPClientHandler-57505] INFO: TCP Client disconnected: 127.0.0.1:57505
+[11:33:46] [MainThread] INFO: TCP File Server listening on 127.0.0.1:5002
+[11:33:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57507
+[11:33:47] [TCPClientHandler-57507] INFO: HELLO received from ClientA (127.0.0.1:57507)
+[11:33:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57508
+[11:33:47] [TCPClientHandler-57507] INFO: TCP Client disconnected: 127.0.0.1:57507
+[11:33:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57509
+[11:33:47] [TCPClientHandler-57508] INFO: HELLO received from ClientA (127.0.0.1:57508)
+[11:33:47] [TCPClientHandler-57509] INFO: HELLO received from ClientB (127.0.0.1:57509)
+[11:33:47] [TCPClientHandler-57509] INFO: HELLO received from ClientB_Repeat (127.0.0.1:57509)
+[11:33:47] [TCPClientHandler-57508] INFO: TCP Client disconnected: 127.0.0.1:57508
+[11:33:47] [TCPClientHandler-57509] INFO: TCP Client disconnected: 127.0.0.1:57509
+[11:33:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57510
+[11:33:47] [TCPClientHandler-57510] WARNING: Malformed payload from 127.0.0.1:57510: Invalid JSON payload: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+[11:33:47] [TCPClientHandler-57510] INFO: TCP Client disconnected: 127.0.0.1:57510
+[11:33:47] [TCPAcceptLoop] INFO: TCP Client connected: 127.0.0.1:57511
+[11:33:47] [TCPClientHandler-57511] INFO: HELLO received from PostErrorCheck (127.0.0.1:57511)
+[11:33:47] [MainThread] INFO: TCP Server stopped

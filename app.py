@@ -70,16 +70,15 @@ def upload_file():
     if not file_obj.filename:
         return jsonify({"success": False, "error": "Empty filename"})
 
-    # Save incoming browser file to local client downloads staging path
+    resume = request.form.get("resume", "false").lower() == "true"
+
     temp_dir = DOWNLOADS_DIR / "staging"
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_path = temp_dir / file_obj.filename
     file_obj.save(str(temp_path))
 
-    # Trigger real Python TCP socket upload to server
-    res = controller.upload_file(str(temp_path))
+    res = controller.upload_file(str(temp_path), resume=resume)
 
-    # Clean up temp staging file
     if temp_path.exists():
         try:
             temp_path.unlink()
@@ -94,11 +93,19 @@ def download_file():
     """Triggers real TCP streaming download from server to client storage."""
     data = request.json or {}
     filename = data.get("filename", "")
+    resume = data.get("resume", False)
     if not filename:
         return jsonify({"success": False, "error": "Filename parameter required"})
 
-    res = controller.download_file(filename)
+    res = controller.download_file(filename, resume=resume)
     return jsonify(res)
+
+
+@app.route("/api/partials", methods=["GET"])
+def get_partials():
+    """Returns partial files available for transfer resume."""
+    partials = controller.list_partial_files()
+    return jsonify({"partials": partials})
 
 
 @app.route("/api/transfers", methods=["GET"])
