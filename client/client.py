@@ -394,6 +394,92 @@ def handle_udp_presence(udp_client: Optional[UDPClient]) -> None:
     print(f"\nActive Heartbeat: {'RUNNING (Every 5s)' if udp_client.is_heartbeat_running else 'STOPPED'}")
 
 
+def handle_live_chat(udp_client: Optional[UDPClient]) -> None:
+    """Module 5: Interactive real-time UDP Live Chat Room supporting Group & Private messaging."""
+    if not udp_client or not udp_client.is_connected:
+        print_warning("UDP Client is not connected to chat server.")
+        return
+
+    print(f"""
+{TermColor.BOLD}{TermColor.CYAN}========================================================================
+  UDP LIVE CHAT ROOM (Port 6000)
+========================================================================{TermColor.RESET}
+  Logged in as: {TermColor.GREEN}{udp_client.username}{TermColor.RESET}
+  Commands:
+    {TermColor.YELLOW}/users{TermColor.RESET}                     - View online users
+    {TermColor.YELLOW}/private <user> <msg>{TermColor.RESET}  - Send private message to a specific user
+    {TermColor.YELLOW}/p <user> <msg>{TermColor.RESET}        - Shorthand for /private
+    {TermColor.YELLOW}/group <msg>{TermColor.RESET}           - Send group message to all online users
+    {TermColor.YELLOW}/history{TermColor.RESET}                  - View chat history
+    {TermColor.YELLOW}<any text>{TermColor.RESET}                - Broadcasts directly to group chat
+    {TermColor.YELLOW}/quit{TermColor.RESET}                    - Exit chat room and return to main menu
+========================================================================
+""")
+    while True:
+        try:
+            cmd_line = input(f"[{udp_client.username}@Chat] > ").strip()
+            if not cmd_line:
+                continue
+
+            if cmd_line.lower() in ["/quit", "/exit", "/q"]:
+                print_info("Exiting Live Chat Room...", tag="UDP")
+                break
+
+            elif cmd_line.lower() == "/users":
+                users = udp_client.get_online_users()
+                print_info(f"Online Users ({len(users)} found):", tag="UDP")
+                for u in users:
+                    st = u.get("status", "OFFLINE")
+                    color = TermColor.GREEN if st == "ONLINE" else TermColor.RED
+                    print(f"  • {u.get('username'):16} | {color}{st}{TermColor.RESET} | Endpoint: {u.get('endpoint')}")
+
+            elif cmd_line.lower() == "/history":
+                history = udp_client.get_chat_history()
+                print_info(f"Chat History ({len(history)} messages):", tag="UDP")
+                for m in history:
+                    mode = m.get("mode", "GROUP")
+                    sender = m.get("sender")
+                    recip = m.get("recipient", "ALL")
+                    txt = m.get("message")
+                    ts = m.get("timestamp")
+                    st = m.get("status", "Delivered")
+                    if mode == "PRIVATE":
+                        print(f"  [{ts}] [PRIVATE {sender}->{recip}] {txt} ({st})")
+                    else:
+                        print(f"  [{ts}] [GROUP {sender}] {txt} ({st})")
+
+            elif cmd_line.startswith("/private ") or cmd_line.startswith("/p "):
+                parts = cmd_line.split(" ", 2)
+                if len(parts) < 3 or not parts[2].strip():
+                    print_warning("Usage: /private <username> <message>")
+                    continue
+                target_user = parts[1].strip()
+                private_msg = parts[2].strip()
+                res = udp_client.send_private_message(recipient=target_user, message_text=private_msg)
+                if not res.get("success"):
+                    print_error(f"Failed to send private message: {res.get('error')}")
+
+            elif cmd_line.startswith("/group ") or cmd_line.startswith("/g "):
+                parts = cmd_line.split(" ", 1)
+                if len(parts) < 2 or not parts[1].strip():
+                    print_warning("Usage: /group <message>")
+                    continue
+                group_msg = parts[1].strip()
+                res = udp_client.send_group_message(group_msg)
+                if not res.get("success"):
+                    print_error(f"Failed to send group message: {res.get('error')}")
+
+            else:
+                # Default text sends as group message
+                res = udp_client.send_group_message(cmd_line)
+                if not res.get("success"):
+                    print_error(f"Failed to send message: {res.get('error')}")
+
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting Live Chat Room...")
+            break
+
+
 def main() -> None:
     print_banner()
 
@@ -430,12 +516,12 @@ def main() -> None:
             print_error(f"Registration Failed: {err_msg}")
             current_username = input("\nPlease re-enter a valid username: ").strip()
 
-    # Step 2: Initialize UDP Client with same authenticated session for Live Presence
+    # Step 2: Initialize UDP Client with same authenticated session for Live Presence & Chat
     udp_client = UDPClient(host=host, port=UDP_PORT, username=current_username, session_id=session_id)
     if udp_client.connect():
         resp_udp = udp_client.join_chat()
         if resp_udp and resp_udp.get("status") == "SUCCESS":
-            print_success(f"Registered with UDP Presence & Heartbeat Engine on port {UDP_PORT}!")
+            print_success(f"Registered with UDP Presence & Chat Engine on port {UDP_PORT}!")
         else:
             print_warning("UDP Presence registration did not complete (Server may not be running UDP).")
 
@@ -454,9 +540,10 @@ def main() -> None:
 [8] Resume Interrupted File Transfer (Upload / Download)
 [9] Cancel Active or Pending Transfer
 [10] View Real-Time UDP Online Presence & Heartbeat Monitor
+[11] Enter Real-Time UDP Live Chat Room (Group & Private)
 [0] Disconnect & Exit
 """)
-            choice = input("Select an option [0-10]: ").strip()
+            choice = input("Select an option [0-11]: ").strip()
 
             if choice == "1":
                 print(f"""
@@ -504,6 +591,9 @@ def main() -> None:
             elif choice == "10":
                 handle_udp_presence(udp_client)
 
+            elif choice == "11":
+                handle_live_chat(udp_client)
+
             elif choice in ["0", "exit", "quit"]:
                 print_info("Disconnecting from TCP & UDP servers...", tag="TCP")
                 if udp_client:
@@ -512,7 +602,7 @@ def main() -> None:
                 print_success("Disconnected cleanly. Goodbye!")
                 break
             else:
-                print_warning("Invalid choice. Please select 0-10.")
+                print_warning("Invalid choice. Please select 0-11.")
 
         except (KeyboardInterrupt, EOFError):
             print("\nDisconnecting...")

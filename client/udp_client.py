@@ -115,9 +115,16 @@ class UDPClient:
                                     if m.get("sequence") == seq:
                                         m["status"] = "Delivered"
 
-                        elif msg_type == "BROADCAST":
+                        elif msg_type == "ERROR":
+                            code = payload.get("code", "ERROR")
+                            err_msg = payload.get("message", "Unknown error")
+                            print_warning(f"UDP Error from Server [{code}]: {err_msg}")
+
+                        elif msg_type in ["BROADCAST", "MSG"]:
                             seq = int(payload.get("sequence", 0))
                             sender = payload.get("sender", "Unknown")
+                            recipient = payload.get("recipient", "ALL")
+                            mode = str(payload.get("mode", "GROUP" if msg_type == "BROADCAST" else "PRIVATE")).upper()
 
                             # Check if message already exists in history (e.g. locally added on send)
                             already_present = False
@@ -139,13 +146,18 @@ class UDPClient:
                             self.processed_sequences.add(seq)
                             record = {
                                 "sequence": seq,
+                                "mode": mode,
                                 "sender": sender,
+                                "recipient": recipient,
                                 "message": payload.get("message", ""),
                                 "timestamp": payload.get("timestamp", get_timestamp()),
                                 "status": "Delivered"
                             }
                             self.messages_history.append(record)
-                            print_info(f"UDP Chat [{record['sender']}]: {record['message']}", tag="UDP")
+                            if mode == "PRIVATE":
+                                print_info(f"UDP Private MSG from [{sender}]: {record['message']}", tag="UDP")
+                            else:
+                                print_info(f"UDP Group Chat [{sender}]: {record['message']}", tag="UDP")
 
                 except Exception:
                     pass
@@ -201,10 +213,10 @@ class UDPClient:
             print_warning(f"UDP JOIN request error: {e}")
             return None
 
-    def send_chat_message(self, message_text: str) -> Dict[str, Any]:
+    def send_chat_message(self, message_text: str, recipient: Optional[str] = None) -> Dict[str, Any]:
         """
         Sends a MSG UDP datagram to the server with Application-Layer Reliability
-        (ACK tracking & retransmission handling).
+        (ACK tracking & retransmission handling). Supports Group and Private messaging.
         """
         if not self.is_connected or not self.sock:
             return {"success": False, "error": "UDP Client is not connected"}
@@ -216,21 +228,29 @@ class UDPClient:
         if len(text) > 1024:
             text = text[:1024]
 
+        mode = "PRIVATE" if recipient and recipient.upper() not in ["ALL", "GROUP", ""] else "GROUP"
+        target_recip = recipient if mode == "PRIVATE" else "ALL"
+
         with self._lock:
             self.seq_counter += 1
             seq = self.seq_counter
 
         msg_payload = {
             "type": "MSG",
+            "mode": mode,
             "sequence": seq,
             "sender": self.username,
+            "recipient": target_recip,
             "message": text,
+            "session_id": self.session_id,
             "timestamp": get_timestamp()
         }
 
         local_record = {
             "sequence": seq,
+            "mode": mode,
             "sender": self.username,
+            "recipient": target_recip,
             "message": text,
             "timestamp": get_timestamp(),
             "status": "Sent"
@@ -254,7 +274,8 @@ class UDPClient:
                 global_stats.record_udp_send(len(raw_bytes))
             except Exception:
                 pass
-            print_info(f"Sent UDP Chat MSG [seq={seq}]: '{text}'", tag="UDP")
+            prefix = f"Private to [{target_recip}]" if mode == "PRIVATE" else "Group"
+            print_info(f"Sent UDP Chat MSG ({prefix}) [seq={seq}]: '{text}'", tag="UDP")
         except Exception as e:
             print_error(f"Error sending UDP message: {e}")
             return {"success": False, "error": str(e)}
@@ -384,9 +405,30 @@ class UDPClient:
         except Exception:
             return []
 
+    def send_private_message(self, recipient: str, message_text: str) -> Dict[str, Any]:
+        """Convenience method to send a private UDP chat message to a specific user."""
+        return self.send_chat_message(message_text=message_text, recipient=recipient)
+
+    def send_group_message(self, message_text: str) -> Dict[str, Any]:
+        """Convenience method to send a group UDP chat message to all online users."""
+        return self.send_chat_message(message_text=message_text, recipient="ALL")
+
     def get_chat_history(self) -> List[Dict[str, Any]]:
         with self._lock:
             return list(self.messages_history)
+
+    def get_private_messages(self, peer: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Filters chat history for private messages (optionally with a specific peer)."""
+        with self._lock:
+            privates = [m for m in self.messages_history if m.get("mode") == "PRIVATE"]
+            if peer:
+                return [m for m in privates if m.get("sender") == peer or m.get("recipient") == peer]
+            return privates
+
+    def get_group_messages(self) -> List[Dict[str, Any]]:
+        """Filters chat history for group messages."""
+        with self._lock:
+            return [m for m in self.messages_history if m.get("mode") == "GROUP"]
 
     def get_presence_events(self) -> List[Dict[str, Any]]:
         """Returns list of received UDP presence change notifications."""

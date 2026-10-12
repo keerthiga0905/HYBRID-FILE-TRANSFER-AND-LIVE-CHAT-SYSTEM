@@ -165,31 +165,137 @@ class UDPServer:
             seq = payload.get("sequence", 0)
             text = str(payload.get("message", "")).strip()
 
-            # Enforce 1024 character message limit
+            # 1. Sender validation against registered session and endpoint (anti-spoofing)
+            sender_data = self.registry.clients.get(username)
+            if not sender_data or sender_data.get("status") != "ONLINE":
+                err_resp = {
+                    "type": "ERROR",
+                    "code": "UNAUTHORIZED_SENDER",
+                    "message": f"Sender '{username}' is not registered or not online."
+                }
+                self._send_response(err_resp, addr)
+                return
+
+            if sender_data.get("session_id") and session_id and sender_data["session_id"] != session_id:
+                err_resp = {
+                    "type": "ERROR",
+                    "code": "SESSION_MISMATCH",
+                    "message": "Sender session ID does not match registered session."
+                }
+                self._send_response(err_resp, addr)
+                return
+
+            if sender_data.get("ip") and sender_data.get("port"):
+                if (sender_data["ip"], sender_data["port"]) != addr:
+                    err_resp = {
+                        "type": "ERROR",
+                        "code": "ENDPOINT_SPOOF",
+                        "message": "Sender IP/Port does not match registered endpoint."
+                    }
+                    self._send_response(err_resp, addr)
+                    return
+
+            # 2. Message validation & size limit (1024 characters)
+            if not text:
+                err_resp = {
+                    "type": "ERROR",
+                    "code": "EMPTY_MESSAGE",
+                    "message": "Cannot send empty message."
+                }
+                self._send_response(err_resp, addr)
+                return
+
             if len(text) > 1024:
                 text = text[:1024]
 
             self.registry.update_heartbeat(username, addr[0], addr[1], session_id=session_id)
-            print_info(f"UDP Chat MSG from '{username}' [seq={seq}]: '{text}'", tag="UDP")
-            log_event(f"UDP Chat MSG from '{username}' [seq={seq}]: {text}")
 
-            # Send ACK to sender
-            ack_msg = {
-                "type": "ACK",
-                "sequence": seq,
-                "status": "SUCCESS"
-            }
-            self._send_response(ack_msg, addr)
+            # 3. Route Private vs Group Message
+            mode = str(payload.get("mode", "GROUP")).upper()
+            recipient = str(payload.get("recipient", "ALL")).strip()
 
-            # Broadcast message to all online clients
-            broadcast_packet = {
-                "type": "BROADCAST",
-                "sequence": seq,
-                "sender": username,
-                "message": text,
-                "timestamp": get_timestamp()
-            }
-            self._broadcast_to_online_users(broadcast_packet, sender_addr=addr)
+            if mode == "PRIVATE" or (recipient and recipient.upper() not in ["ALL", "GROUP", ""]):
+                # Private Chat Routing
+                if recipient == username:
+                    err_resp = {
+                        "type": "ERROR",
+                        "code": "SELF_MESSAGE",
+                        "message": "Cannot send private message to yourself."
+                    }
+                    self._send_response(err_resp, addr)
+                    return
+
+                target_data = self.registry.clients.get(recipient)
+                if not target_data or target_data.get("status") != "ONLINE":
+                    err_resp = {
+                        "type": "ERROR",
+                        "code": "RECIPIENT_OFFLINE",
+                        "message": f"User '{recipient}' is not online."
+                    }
+                    self._send_response(err_resp, addr)
+                    return
+
+                if not target_data.get("ip") or not target_data.get("port"):
+                    err_resp = {
+                        "type": "ERROR",
+                        "code": "RECIPIENT_UNAVAILABLE",
+                        "message": f"User '{recipient}' endpoint is unavailable."
+                    }
+                    self._send_response(err_resp, addr)
+                    return
+
+                # Send ACK to sender
+                ack_msg = {
+                    "type": "ACK",
+                    "sequence": seq,
+                    "status": "SUCCESS",
+                    "mode": "PRIVATE",
+                    "recipient": recipient
+                }
+                self._send_response(ack_msg, addr)
+
+                # Deliver private message ONLY to the target recipient
+                private_packet = {
+                    "type": "MSG",
+                    "mode": "PRIVATE",
+                    "sequence": seq,
+                    "sender": username,
+                    "recipient": recipient,
+                    "message": text,
+                    "timestamp": get_timestamp()
+                }
+                try:
+                    raw_bytes = json.dumps(private_packet).encode("utf-8")
+                    self.udp_socket.sendto(raw_bytes, (target_data["ip"], target_data["port"]))
+                    print_info(f"UDP Private MSG routed: '{username}' -> '{recipient}' [seq={seq}]", tag="UDP")
+                    log_event(f"UDP Private MSG: '{username}' -> '{recipient}' [seq={seq}]: {text}")
+                except Exception as e:
+                    log_event(f"Error routing private UDP message to {recipient}: {e}", "error")
+
+            else:
+                # Group Chat Broadcast
+                ack_msg = {
+                    "type": "ACK",
+                    "sequence": seq,
+                    "status": "SUCCESS",
+                    "mode": "GROUP",
+                    "recipient": "ALL"
+                }
+                self._send_response(ack_msg, addr)
+
+                # Broadcast to all online users (excluding sender)
+                broadcast_packet = {
+                    "type": "BROADCAST",
+                    "mode": "GROUP",
+                    "sequence": seq,
+                    "sender": username,
+                    "recipient": "ALL",
+                    "message": text,
+                    "timestamp": get_timestamp()
+                }
+                self._broadcast_to_online_users(broadcast_packet, sender_addr=addr)
+                print_info(f"UDP Group MSG from '{username}' [seq={seq}]: '{text}'", tag="UDP")
+                log_event(f"UDP Group MSG from '{username}' [seq={seq}]: {text}")
 
         elif msg_type == "GET_USERS":
             response = {

@@ -499,6 +499,123 @@ python -m unittest tests/test_udp.py -v
 
 ---
 
+## 💬 Module 5: Complete UDP Live Chat System (Group & Private Messaging)
+
+### 1. Module 5 Objectives & UDP Rules
+Module 5 implements real-time peer-to-peer and broadcast messaging using pure connectionless UDP datagram sockets (`socket.AF_INET`, `socket.SOCK_DGRAM`) on port **6000**, operating alongside the TCP server (port **5000**).
+
+> [!IMPORTANT]
+> **Transport Protocol Truth:** UDP itself does not provide connection handshakes, delivery guarantees, packet ordering, or duplicate elimination. In this architecture, all chat payloads travel as raw UDP datagrams without using TCP, WebSockets, Socket.IO, Firebase, or HTTP.
+
+* **Online User Directory:** Live directory querying online peers via UDP `GET_USERS` datagrams.
+* **Isolated Private Chat:** Route private messages **strictly and exclusively** to the intended recipient's registered UDP endpoint (`IP:Port`). Third-party clients never receive private datagrams.
+* **Group Broadcast Room:** A shared chat space broadcasting messages to all currently online users (excluding the sender).
+* **Identity & Timestamp Framing:** Every message frame carries `sender`, `recipient`, `timestamp` (`HH:MM:SS`), and payload content.
+* **Asynchronous Live Receiving:** The client's background `UDPReceiverThread` continuously captures and renders incoming messages in real time even while the user is actively typing.
+* **Concurrency Handling:** Multiple clients can transmit simultaneously without stream locking or serialization stalls.
+* **Validation & Constraints:** Enforces username syntax, validates recipient online status, rejects empty text, and caps messages at 1024 characters to prevent datagram fragmentation.
+* **Interactive Chat Commands:** Fully supports `/users`, `/private <username> <message>`, `/p <username> <message>`, `/group <message>`, `<any text>` (default group), `/history`, and `/quit`.
+* **Delivery Status Telemetry:** Connection-independent states: `[Sent]`, `[Delivered]` (upon server ACK), `[Retrying]`, and `[Delivery Failed]` (after 3 timeout attempts).
+* **Anti-Spoofing Security:** The server cryptographically validates the sender's username against both its authenticated TCP/UDP session token and the origin socket `(IP, Port)`. Forged or spoofed sender headers are rejected with `UNAUTHORIZED_SENDER` or `SESSION_MISMATCH`.
+
+---
+
+### 2. Live Chat Architecture & Protocol Flow
+
+```text
+ALICE (127.0.0.1:54101)           UDP SERVER (Port 6000)        BOB (127.0.0.1:54102)        CHARLIE (127.0.0.1:54103)
+      │                                    │                              │                            │
+      │ 1. MSG [mode=GROUP, seq=101]       │                              │                            │
+      ├───────────────────────────────────>│ [Sender verified!]          │                            │
+      │<── ACK [101, status=SUCCESS] ──────┤                              │                            │
+      │                                    │ 2. BROADCAST [Alice: "Hi!"]  │                            │
+      │                                    ├─────────────────────────────>│                            │
+      │                                    ├──────────────────────────────────────────────────────────>│
+      │                                    │                              │                            │
+      │ 3. MSG [mode=PRIVATE, to=Bob]      │                              │                            │
+      ├───────────────────────────────────>│ [Validates Bob is ONLINE]    │                            │
+      │<── ACK [102, PRIVATE] ─────────────┤                              │                            │
+      │                                    │ 4. MSG [mode=PRIVATE]        │                            │
+      │                                    │    (Forwarded ONLY to Bob)   │                            │
+      │                                    ├─────────────────────────────>│ [Received!]                │
+      │                                    │                              │ (Charlie receives NOTHING) │
+      │                                    │                              │                            │
+      │ 5. Spoofed Datagram (from Hacker)  │                              │                            │
+      │    [sender=Alice, fake session]    │                              │                            │
+      │    ───────────────────────────────>│ [REJECTED: SESSION_MISMATCH] │                            │
+      │    <── ERROR [SESSION_MISMATCH] ───┤ (Dropped, never forwarded)   │                            │
+```
+
+---
+
+### 3. Step-by-Step PowerShell Guide: Testing Live Private & Group Chat
+
+Open **four** separate Windows PowerShell windows:
+
+#### Terminal 1: Start Server (Dual TCP & UDP)
+```powershell
+python server/server.py
+```
+
+#### Terminal 2: Start Client 1 (Alice)
+```powershell
+python client/client.py
+```
+- Username: `Alice`
+- Choose menu option `[11] Enter Real-Time UDP Live Chat Room (Group & Private)`.
+
+#### Terminal 3: Start Client 2 (Bob)
+```powershell
+python client/client.py
+```
+- Username: `Bob`
+- Choose menu option `[11] Enter Real-Time UDP Live Chat Room (Group & Private)`.
+
+#### Terminal 4: Start Client 3 (Charlie)
+```powershell
+python client/client.py
+```
+- Username: `Charlie`
+- Choose menu option `[11] Enter Real-Time UDP Live Chat Room (Group & Private)`.
+
+---
+
+#### Step 4: Test Group Broadcast
+In **Terminal 2 (Alice)**, type:
+```text
+Hello everyone on the network!
+```
+- **Terminal 3 (Bob)** instantly receives: `[UDP Group Chat [Alice]: Hello everyone on the network!]`
+- **Terminal 4 (Charlie)** instantly receives: `[UDP Group Chat [Alice]: Hello everyone on the network!]`
+
+---
+
+#### Step 5: Test Private Messaging (Alice to Bob)
+In **Terminal 2 (Alice)**, type:
+```text
+/private Bob Secret meeting at 3pm
+```
+- **Terminal 3 (Bob)** receives: `[UDP Private MSG from [Alice]: Secret meeting at 3pm]`
+- **Terminal 4 (Charlie)** receives **nothing** (private isolation preserved)!
+
+---
+
+#### Step 6: Test Live Asynchronous Reception While Typing
+1. In **Terminal 3 (Bob)**, start typing a long sentence into the prompt without pressing Enter.
+2. In **Terminal 4 (Charlie)**, send a group message: `/group Charlie is online!`.
+3. Observe that **Bob's terminal** prints Charlie's message asynchronously without interrupting Bob's ongoing typing!
+4. Bob can then press Enter to send his message smoothly.
+
+---
+
+### 4. Running Automated Tests for Module 5
+```powershell
+python -m unittest tests/test_chat.py -v
+```
+*All 7 tests pass, verifying 3-client group broadcasts, private message isolation, multi-client concurrency, anti-spoofing sender validation, offline recipient rejection, 1024-char limits, and asynchronous message delivery.*
+
+---
+
 ## 🏗️ System Architecture
 
 ```text
@@ -656,7 +773,7 @@ Connection is now established.
 
 ---
 
-## 🧪 Automated Unit Test Suite (45 Passed)
+## 🧪 Automated Unit Test Suite (50 Passed)
 
 To run the complete automated test suite:
 ```bash
@@ -669,8 +786,8 @@ python -m unittest discover tests
 | [`test_protocol.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_protocol.py) | 4-byte Big-Endian framing, JSON encoding & length verification | **PASSED** |
 | [`test_file_transfer.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_file_transfer.py) | 4KB chunk streaming upload, download & SHA-256 verification | **PASSED** |
 | [`test_resume.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_resume.py) | Interrupted file upload/download RESUME from `.part` offsets | **PASSED** |
-| [`test_udp.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_udp.py) | UDP JOIN, chat broadcast & 15-second heartbeat presence monitor | **PASSED** |
-| [`test_chat.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_chat.py) | Multi-user chat history & presence registry tracking | **PASSED** |
+| [`test_udp.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_udp.py) | UDP JOIN, 5s heartbeat, 15s timeout presence & stale endpoint cleanup | **PASSED** |
+| [`test_chat.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_chat.py) | UDP 3-client group broadcast, private messaging isolation & anti-spoofing | **PASSED** |
 | [`test_udp_reliability.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_udp_reliability.py) | Sequence tracking, 1s ACK timeout retransmissions & duplicate rejection | **PASSED** |
 | [`test_stats.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_stats.py) | Network statistics collector, throughput speeds & packet metrics | **PASSED** |
 | [`test_simulation.py`](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/tests/test_simulation.py) | Simulated UDP packet loss rates (0% to 50%) & drop checking | **PASSED** |
