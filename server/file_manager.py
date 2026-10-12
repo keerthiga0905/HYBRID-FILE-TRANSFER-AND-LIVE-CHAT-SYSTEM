@@ -7,7 +7,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from shared.config import UPLOADS_DIR, CHUNK_SIZE
+from shared.config import UPLOADS_DIR, TRANSFERS_DIR, CHUNK_SIZE
 from shared.checksum import calculate_sha256, verify_checksum
 
 
@@ -123,3 +123,97 @@ def save_upload_stream(sock, filename: str, expected_size: int, expected_checksu
     except Exception as e:
         # Preserve partial file for resume on connection drop
         raise e
+
+
+def get_safe_transfer_path(transfer_id: str, filename: str) -> Path:
+    """Returns safe path for staged peer transfer file in TRANSFERS_DIR."""
+    clean_name = sanitize_filename(filename)
+    clean_tid = "".join(c for c in transfer_id if c.isalnum() or c in "-_")
+    if not clean_tid:
+        raise ValueError("Invalid transfer ID")
+    target_path = (TRANSFERS_DIR / f"{clean_tid}_{clean_name}").resolve()
+    if not str(target_path).startswith(str(TRANSFERS_DIR.resolve())):
+        raise ValueError(f"Security Alert: Path traversal attempt for transfer file '{filename}'")
+    return target_path
+
+
+def save_transfer_stream(sock, transfer_id: str, filename: str, expected_size: int, expected_checksum: str) -> Dict[str, Any]:
+    """
+    Streams file chunks for a peer transfer into storage/transfers/,
+    computes SHA-256 hash, and verifies integrity against sender's checksum.
+    """
+    safe_final_path = get_safe_transfer_path(transfer_id, filename)
+    safe_final_path.parent.mkdir(parents=True, exist_ok=True)
+    part_path = safe_final_path.parent / (safe_final_path.name + ".part")
+
+    received_bytes = 0
+    start_time = datetime.now()
+
+    try:
+        with open(part_path, "wb") as f:
+            while received_bytes < expected_size:
+                remaining = expected_size - received_bytes
+                to_read = min(CHUNK_SIZE, remaining)
+
+                chunk = sock.recv(to_read)
+                if not chunk:
+                    raise ConnectionError("Socket disconnected during peer file transfer stream")
+
+                f.write(chunk)
+                received_bytes += len(chunk)
+
+        # Compute and verify SHA-256
+        server_checksum = calculate_sha256(part_path)
+        checksum_valid = verify_checksum(expected_checksum, server_checksum)
+
+        if checksum_valid:
+            if safe_final_path.exists():
+                safe_final_path.unlink()
+            part_path.rename(safe_final_path)
+
+            elapsed = (datetime.now() - start_time).total_seconds()
+            throughput = (expected_size / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+
+            return {
+                "success": True,
+                "status": "SUCCESS",
+                "transfer_id": transfer_id,
+                "filename": safe_final_path.name,
+                "bytes_received": received_bytes,
+                "server_checksum": server_checksum,
+                "checksum_verified": True,
+                "throughput_mbs": round(throughput, 2)
+            }
+        else:
+            if part_path.exists():
+                part_path.unlink()
+            return {
+                "success": False,
+                "status": "ERROR",
+                "error": "SHA-256 checksum mismatch",
+                "client_checksum": expected_checksum,
+                "server_checksum": server_checksum,
+                "checksum_verified": False
+            }
+
+    except Exception as e:
+        if part_path.exists():
+            try:
+                part_path.unlink()
+            except Exception:
+                pass
+        raise e
+
+
+def cleanup_transfer_file(transfer_id: str, filename: str) -> None:
+    """Removes staged transfer file from TRANSFERS_DIR after delivery."""
+    try:
+        safe_path = get_safe_transfer_path(transfer_id, filename)
+        if safe_path.exists():
+            safe_path.unlink()
+        part_path = safe_path.parent / (safe_path.name + ".part")
+        if part_path.exists():
+            part_path.unlink()
+    except Exception:
+        pass
+

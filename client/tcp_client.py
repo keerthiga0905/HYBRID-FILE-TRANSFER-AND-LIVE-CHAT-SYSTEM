@@ -6,6 +6,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
 import socket
+import time
+import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional, Callable, List
 from shared.config import DEFAULT_HOST, TCP_PORT, CHUNK_SIZE
@@ -246,10 +248,343 @@ class TCPClient:
                     "error": "Downloaded file checksum mismatch",
                     "checksum_verified": False
                 }
-
         except Exception as e:
             print_error(f"Error downloading file: {e}")
             return {"success": False, "error": str(e)}
+
+    def list_online_users(self) -> List[Dict[str, Any]]:
+        """Requests list of all other online users registered on TCP server."""
+        if not self.is_connected or not self.sock:
+            return []
+        try:
+            send_message(self.sock, {"command": "GET_USERS"})
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return resp.get("users", [])
+            return []
+        except Exception as e:
+            print_error(f"Error fetching online users list: {e}")
+            return []
+
+    def offer_peer_transfer(self, receiver: str, file_path_str: str) -> Dict[str, Any]:
+        """
+        Calculates file SHA-256 and size, generates unique transfer ID,
+        and submits PEER_TRANSFER_OFFER to the TCP server.
+        """
+        if not self.is_connected or not self.sock:
+            return {"success": False, "error": "TCP Client is not connected"}
+
+        file_path = Path(file_path_str).resolve()
+        if not file_path.exists() or not file_path.is_file():
+            return {"success": False, "error": f"Local file not found: {file_path_str}"}
+
+        filename = sanitize_filename(file_path.name)
+        filesize = file_path.stat().st_size
+        if filesize <= 0:
+            return {"success": False, "error": "File is empty (0 bytes)"}
+
+        print_info(f"Computing SHA-256 checksum for '{filename}' ({filesize} bytes)...", tag="TCP")
+        checksum = calculate_sha256(file_path)
+        transfer_id = uuid.uuid4().hex[:12]
+
+        req = {
+            "command": "PEER_TRANSFER_OFFER",
+            "transfer_id": transfer_id,
+            "sender": self.username,
+            "receiver": receiver.strip(),
+            "filename": filename,
+            "filesize": filesize,
+            "checksum": checksum
+        }
+
+        try:
+            send_message(self.sock, req)
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return {
+                    "success": True,
+                    "transfer_id": transfer_id,
+                    "receiver": receiver,
+                    "filename": filename,
+                    "filesize": filesize,
+                    "checksum": checksum,
+                    "message": resp.get("message")
+                }
+            else:
+                err_msg = resp.get("message") if resp else "Server did not respond"
+                return {"success": False, "error": err_msg, "code": resp.get("code") if resp else None}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def check_transfer_status(self, transfer_id: str) -> Optional[Dict[str, Any]]:
+        """Queries current status of transfer_id on the server."""
+        if not self.is_connected or not self.sock:
+            return None
+        try:
+            send_message(self.sock, {"command": "CHECK_TRANSFER_STATUS", "transfer_id": transfer_id})
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return resp.get("transfer")
+            return None
+        except Exception:
+            return None
+
+    def check_incoming_transfers(self) -> List[Dict[str, Any]]:
+        """Fetches pending transfer notifications from server inbox."""
+        if not self.is_connected or not self.sock:
+            return []
+        try:
+            send_message(self.sock, {"command": "CHECK_INCOMING_TRANSFERS"})
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return resp.get("requests", [])
+            return []
+        except Exception:
+            return []
+
+    def respond_to_transfer(self, transfer_id: str, decision: str, reason: str = "") -> Dict[str, Any]:
+        """Sends ACCEPT or REJECT decision for an incoming transfer request."""
+        if not self.is_connected or not self.sock:
+            return {"success": False, "error": "TCP Client is not connected"}
+        req = {
+            "command": "PEER_TRANSFER_RESPONSE",
+            "transfer_id": transfer_id,
+            "decision": decision.upper(),
+            "reason": reason
+        }
+        try:
+            send_message(self.sock, req)
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return {"success": True, "decision": decision.upper(), "message": resp.get("message")}
+            return {"success": False, "error": resp.get("message") if resp else "No response"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def stream_peer_upload(self, transfer_id: str, file_path_str: str, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """
+        Streams binary file in 4096-byte chunks to server staging relay for transfer_id.
+        Tracks progress, bytes sent, speed, and status.
+        """
+        if not self.is_connected or not self.sock:
+            return {"success": False, "error": "TCP Client is not connected"}
+
+        file_path = Path(file_path_str).resolve()
+        if not file_path.exists():
+            return {"success": False, "error": f"File not found: {file_path_str}"}
+
+        filesize = file_path.stat().st_size
+        filename = sanitize_filename(file_path.name)
+
+        send_message(self.sock, {"command": "PEER_UPLOAD_START", "transfer_id": transfer_id})
+        ready_ack = receive_message(self.sock)
+        if not ready_ack or ready_ack.get("status") != "READY":
+            return {"success": False, "error": ready_ack.get("message", "Server not ready for upload")}
+
+        print_info(f"Streaming '{filename}' ({filesize} bytes) in {CHUNK_SIZE}-byte chunks...", tag="TCP")
+        sent_bytes = 0
+        start_time = datetime.now()
+        speed = 0.0
+
+        try:
+            with open(file_path, "rb") as f:
+                while chunk := f.read(CHUNK_SIZE):
+                    self.sock.sendall(chunk)
+                    sent_bytes += len(chunk)
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    speed = (sent_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                    if progress_callback:
+                        progress_callback(sent_bytes, filesize, speed)
+
+            # Receive completion confirmation from server relay
+            result = receive_message(self.sock)
+            if result and result.get("status") == "SUCCESS":
+                print_success(f"File streamed & staged successfully! [{transfer_id}]")
+                return {
+                    "success": True,
+                    "transfer_id": transfer_id,
+                    "filename": filename,
+                    "bytes_sent": sent_bytes,
+                    "filesize": filesize,
+                    "speed_mbs": round(speed, 2),
+                    "status": "STAGED_ON_SERVER"
+                }
+            else:
+                err = result.get("message") if result else "Upload confirmation failed"
+                print_error(f"Stream upload error: {err}")
+                return {"success": False, "error": err}
+
+        except Exception as e:
+            print_error(f"Exception during peer stream upload: {e}")
+            return {"success": False, "error": str(e)}
+
+    def stream_peer_download(self, transfer_id: str, filename: str, filesize: int, expected_checksum: str, custom_downloads_dir: Optional[Path | str] = None, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """
+        Streams binary file in 4096-byte chunks from server staging relay for transfer_id.
+        Saves into configured downloads directory, verifies SHA-256, and reports success.
+        """
+        if not self.is_connected or not self.sock:
+            return {"success": False, "error": "TCP Client is not connected"}
+
+        clean_name = sanitize_filename(filename)
+        dest_path = get_safe_download_path(clean_name, custom_downloads_dir)
+        part_path = dest_path.parent / (dest_path.name + ".part")
+
+        send_message(self.sock, {"command": "PEER_DOWNLOAD_START", "transfer_id": transfer_id})
+        ready_ack = receive_message(self.sock)
+        if not ready_ack or ready_ack.get("status") != "READY":
+            return {"success": False, "error": ready_ack.get("message", "Server not ready for download")}
+
+        print_info(f"Downloading '{clean_name}' ({filesize} bytes) from server relay...", tag="TCP")
+        received_bytes = 0
+        start_time = datetime.now()
+
+        try:
+            with open(part_path, "wb") as f:
+                while received_bytes < filesize:
+                    remaining = filesize - received_bytes
+                    to_read = min(CHUNK_SIZE, remaining)
+                    chunk = self.sock.recv(to_read)
+                    if not chunk:
+                        raise ConnectionError("Connection lost during peer download stream")
+                    f.write(chunk)
+                    received_bytes += len(chunk)
+                    elapsed = (datetime.now() - start_time).total_seconds()
+                    speed = (received_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                    if progress_callback:
+                        progress_callback(received_bytes, filesize, speed)
+
+            # Calculate SHA-256 and verify against sender's checksum
+            actual_checksum = calculate_sha256(part_path)
+            checksum_valid = verify_checksum(expected_checksum, actual_checksum)
+
+            if checksum_valid:
+                if dest_path.exists():
+                    dest_path.unlink()
+                part_path.rename(dest_path)
+
+                # Acknowledge completion to server
+                send_message(self.sock, {"command": "PEER_DOWNLOAD_COMPLETE", "transfer_id": transfer_id})
+                comp_ack = receive_message(self.sock)
+
+                print_success(f"Received and verified '{clean_name}'! SHA-256 match confirmed.")
+                return {
+                    "success": True,
+                    "transfer_id": transfer_id,
+                    "filename": clean_name,
+                    "filesize": filesize,
+                    "saved_path": str(dest_path),
+                    "checksum": actual_checksum,
+                    "checksum_verified": True
+                }
+            else:
+                if part_path.exists():
+                    part_path.unlink()
+                print_error(f"Received file '{clean_name}' failed SHA-256 checksum verification!")
+                return {
+                    "success": False,
+                    "error": "Checksum verification failed - file corrupted or altered in transit",
+                    "checksum_verified": False,
+                    "expected_checksum": expected_checksum,
+                    "actual_checksum": actual_checksum
+                }
+
+        except Exception as e:
+            if part_path.exists():
+                try:
+                    part_path.unlink()
+                except Exception:
+                    pass
+            print_error(f"Exception during peer download stream: {e}")
+            return {"success": False, "error": str(e)}
+
+    def send_file_to_peer(self, receiver: str, file_path_str: str, timeout: float = 30.0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """
+        End-to-end automated workflow for sender:
+        1. Offers transfer to receiver.
+        2. Polls status until ACCEPTED or REJECTED.
+        3. Once accepted, streams file in 4096-byte chunks.
+        """
+        offer = self.offer_peer_transfer(receiver, file_path_str)
+        if not offer.get("success"):
+            return offer
+
+        transfer_id = offer["transfer_id"]
+        print_info(f"Offer sent [{transfer_id}]. Waiting for '{receiver}' to accept...", tag="TCP")
+        start_wait = time.time()
+
+        while (time.time() - start_wait) < timeout:
+            status_info = self.check_transfer_status(transfer_id)
+            if not status_info:
+                time.sleep(0.3)
+                continue
+
+            current_status = status_info.get("status")
+            if current_status == "REJECTED":
+                return {
+                    "success": False,
+                    "transfer_id": transfer_id,
+                    "status": "REJECTED",
+                    "error": f"Receiver '{receiver}' rejected the file transfer."
+                }
+            elif current_status in ["ACCEPTED", "UPLOADING", "STAGED", "COMPLETED"]:
+                return self.stream_peer_upload(transfer_id, file_path_str, progress_callback=progress_callback)
+
+            time.sleep(0.3)
+
+        return {
+            "success": False,
+            "transfer_id": transfer_id,
+            "status": "TIMEOUT",
+            "error": f"Transfer timed out waiting for receiver '{receiver}' acceptance."
+        }
+
+    def accept_and_receive_transfer(self, transfer_id: str, filename: str, filesize: int, checksum: str, custom_downloads_dir: Optional[Path | str] = None, timeout: float = 30.0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """
+        End-to-end automated workflow for receiver:
+        1. Sends ACCEPT decision.
+        2. Waits until server staging is ready (status == 'STAGED').
+        3. Downloads stream in 4096-byte chunks, verifies SHA-256, and saves to downloads directory.
+        """
+        resp = self.respond_to_transfer(transfer_id, "ACCEPT")
+        if not resp.get("success"):
+            return resp
+
+        print_info(f"Accepted transfer [{transfer_id}]. Waiting for sender stream...", tag="TCP")
+        start_wait = time.time()
+
+        while (time.time() - start_wait) < timeout:
+            status_info = self.check_transfer_status(transfer_id)
+            if not status_info:
+                time.sleep(0.3)
+                continue
+
+            current_status = status_info.get("status")
+            if current_status == "STAGED":
+                return self.stream_peer_download(
+                    transfer_id=transfer_id,
+                    filename=filename,
+                    filesize=filesize,
+                    expected_checksum=checksum,
+                    custom_downloads_dir=custom_downloads_dir,
+                    progress_callback=progress_callback
+                )
+            elif current_status in ["UPLOAD_FAILED", "CHECKSUM_FAILED"]:
+                return {
+                    "success": False,
+                    "transfer_id": transfer_id,
+                    "status": current_status,
+                    "error": "Sender upload to server failed or checksum mismatched"
+                }
+
+            time.sleep(0.3)
+
+        return {
+            "success": False,
+            "transfer_id": transfer_id,
+            "status": "TIMEOUT",
+            "error": "Timed out waiting for sender file stream"
+        }
 
     def disconnect(self) -> None:
         """Closes TCP socket cleanly."""

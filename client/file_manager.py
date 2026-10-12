@@ -6,7 +6,7 @@ and streaming file chunk reading for TCP file upload operations.
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from shared.config import DOWNLOADS_DIR, CHUNK_SIZE
 from shared.checksum import calculate_sha256, verify_checksum
 
@@ -19,12 +19,14 @@ def sanitize_filename(filename: str) -> str:
     return clean_name
 
 
-def get_safe_download_path(filename: str) -> Path:
-    """Resolves filename inside DOWNLOADS_DIR with path containment security check."""
+def get_safe_download_path(filename: str, custom_dir: Optional[Path | str] = None) -> Path:
+    """Resolves filename inside configured downloads directory with path containment security check."""
     clean_name = sanitize_filename(filename)
-    target_path = (DOWNLOADS_DIR / clean_name).resolve()
+    dest_dir = Path(custom_dir).resolve() if custom_dir else DOWNLOADS_DIR.resolve()
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    target_path = (dest_dir / clean_name).resolve()
 
-    if not str(target_path).startswith(str(DOWNLOADS_DIR.resolve())):
+    if not str(target_path).startswith(str(dest_dir)):
         raise ValueError(f"Security Alert: Path traversal attempt detected for filename '{filename}'")
 
     target_path.parent.mkdir(parents=True, exist_ok=True)

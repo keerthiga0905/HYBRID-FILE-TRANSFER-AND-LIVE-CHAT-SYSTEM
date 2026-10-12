@@ -163,6 +163,71 @@ def set_simulation():
     return jsonify(res)
 
 
+# --- Module 2: Peer-to-Peer TCP File Transfer Routes ---
+
+@app.route("/api/peer/users", methods=["GET"])
+def get_peer_users():
+    """Returns connected TCP peers for peer-to-peer file transfer."""
+    users = controller.list_tcp_online_users()
+    return jsonify({"users": users})
+
+
+@app.route("/api/peer/incoming", methods=["GET"])
+def get_peer_incoming():
+    """Checks pending incoming transfer requests for the receiver."""
+    requests_list = controller.check_incoming_transfers()
+    return jsonify({"requests": requests_list})
+
+
+@app.route("/api/peer/send", methods=["POST"])
+def send_peer_file_route():
+    """Initiates peer-to-peer transfer from sender to receiver."""
+    if "file" not in request.files:
+        return jsonify({"success": False, "error": "No file uploaded in request"})
+    receiver = request.form.get("receiver", "").strip()
+    if not receiver:
+        return jsonify({"success": False, "error": "Receiver username required"})
+
+    file_obj = request.files["file"]
+    temp_dir = DOWNLOADS_DIR / "staging"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / file_obj.filename
+    file_obj.save(str(temp_path))
+
+    res = controller.send_peer_file(receiver, str(temp_path))
+    if temp_path.exists():
+        try:
+            temp_path.unlink()
+        except Exception:
+            pass
+    return jsonify(res)
+
+
+@app.route("/api/peer/accept", methods=["POST"])
+def accept_peer_transfer_route():
+    """Receiver accepts pending transfer offer and downloads file."""
+    data = request.json or {}
+    transfer_id = data.get("transfer_id", "")
+    filename = data.get("filename", "")
+    filesize = data.get("filesize", 0)
+    checksum = data.get("checksum", "")
+    custom_dir = data.get("custom_dir")
+
+    res = controller.accept_peer_transfer(transfer_id, filename, filesize, checksum, custom_downloads_dir=custom_dir)
+    return jsonify(res)
+
+
+@app.route("/api/peer/reject", methods=["POST"])
+def reject_peer_transfer_route():
+    """Receiver rejects pending transfer offer."""
+    data = request.json or {}
+    transfer_id = data.get("transfer_id", "")
+    reason = data.get("reason", "Declined by user")
+    res = controller.reject_peer_transfer(transfer_id, reason=reason)
+    return jsonify(res)
+
+
+
 if __name__ == "__main__":
     print(f"========================================")
     print(f"  HYBRID TRANSFER - PRODUCT WEB ENGINE")

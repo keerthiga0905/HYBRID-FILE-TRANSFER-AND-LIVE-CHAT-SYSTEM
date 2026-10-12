@@ -18,7 +18,11 @@ from server.file_manager import (
     list_upload_files,
     save_upload_stream,
     get_safe_upload_path,
-    get_partial_file_offset
+    get_partial_file_offset,
+    get_safe_transfer_path,
+    save_transfer_stream,
+    cleanup_transfer_file,
+    sanitize_filename
 )
 
 
@@ -26,7 +30,7 @@ class TCPServer:
     """
     Multithreaded TCP Server for reliable connection-oriented communication.
     Assigns unique session IDs, manages username registry, detects duplicate users,
-    and supports streaming file operations.
+    and supports streaming file operations and peer-to-peer file transfer routing.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = TCP_PORT):
@@ -37,6 +41,10 @@ class TCPServer:
         self.active_clients: Dict[str, socket.socket] = {}
         self.clients_registry: Dict[str, Dict[str, Any]] = {}
         self.active_usernames: set[str] = set()
+        self.username_to_session: Dict[str, str] = {}
+        self.session_to_socket: Dict[str, socket.socket] = {}
+        self.pending_transfers: Dict[str, Dict[str, Any]] = {}
+        self.user_inbox: Dict[str, List[Dict[str, Any]]] = {}
         self._lock = threading.Lock()
 
     def get_connected_users(self) -> List[Dict[str, Any]]:
@@ -73,6 +81,7 @@ class TCPServer:
                 addr_str = f"{client_addr[0]}:{client_addr[1]}"
                 with self._lock:
                     self.active_clients[addr_str] = client_sock
+                    self.session_to_socket[session_id] = client_sock
 
                 print_info(f"Client connected: {addr_str} (Initial Session: {session_id})", tag="TCP")
                 log_event(f"TCP Client connected: {addr_str} [session={session_id}]")
@@ -146,9 +155,12 @@ class TCPServer:
                         # Update registry
                         if registered_username:
                             self.active_usernames.discard(registered_username)
+                            self.username_to_session.pop(registered_username, None)
 
                         registered_username = raw_name
                         self.active_usernames.add(registered_username)
+                        self.username_to_session[registered_username] = session_id
+                        self.user_inbox.setdefault(registered_username, [])
                         self.clients_registry[session_id] = {
                             "session_id": session_id,
                             "username": registered_username,
@@ -256,6 +268,301 @@ class TCPServer:
                     except ValueError as ve:
                         send_message(client_sock, {"status": "ERROR", "message": str(ve)})
 
+                elif cmd in ["GET_USERS", "LIST_USERS"]:
+                    with self._lock:
+                        users = [
+                            {
+                                "username": u["username"],
+                                "session_id": u["session_id"],
+                                "ip": u["ip"],
+                                "port": u["port"],
+                                "status": u["status"]
+                            }
+                            for u in self.clients_registry.values()
+                            if u.get("username") != registered_username
+                        ]
+                    send_message(client_sock, {
+                        "status": "SUCCESS",
+                        "command": "USERS_LIST",
+                        "users": users
+                    })
+
+                elif cmd == "PEER_TRANSFER_OFFER":
+                    receiver = msg.get("receiver", "").strip()
+                    filename = msg.get("filename", "").strip()
+                    filesize = int(msg.get("filesize", 0))
+                    checksum = msg.get("checksum", "").strip()
+                    transfer_id = msg.get("transfer_id", "")
+
+                    if not receiver or receiver not in self.active_usernames:
+                        send_message(client_sock, {
+                            "status": "ERROR",
+                            "code": "RECEIVER_OFFLINE",
+                            "message": f"Receiver '{receiver}' is not connected or offline."
+                        })
+                        continue
+
+                    if not filename or filesize <= 0 or not checksum or not transfer_id:
+                        send_message(client_sock, {
+                            "status": "ERROR",
+                            "code": "INVALID_METADATA",
+                            "message": "Invalid transfer metadata: filename, filesize, checksum, or transfer_id missing."
+                        })
+                        continue
+
+                    try:
+                        clean_filename = sanitize_filename(filename)
+                    except ValueError as ve:
+                        send_message(client_sock, {"status": "ERROR", "code": "INVALID_FILENAME", "message": str(ve)})
+                        continue
+
+                    transfer_record = {
+                        "transfer_id": transfer_id,
+                        "sender": registered_username or "Unknown",
+                        "receiver": receiver,
+                        "filename": clean_filename,
+                        "filesize": filesize,
+                        "checksum": checksum,
+                        "status": "PENDING",
+                        "created_at": time.time()
+                    }
+
+                    offer_notification = {
+                        "type": "TRANSFER_OFFER",
+                        "transfer_id": transfer_id,
+                        "sender": registered_username or "Unknown",
+                        "filename": clean_filename,
+                        "filesize": filesize,
+                        "checksum": checksum
+                    }
+
+                    with self._lock:
+                        self.pending_transfers[transfer_id] = transfer_record
+                        self.user_inbox.setdefault(receiver, []).append(offer_notification)
+
+                    print_info(f"Peer transfer offer [{transfer_id}] from '{registered_username}' to '{receiver}': '{clean_filename}' ({filesize} bytes)", tag="TCP")
+                    log_event(f"Peer transfer offer [{transfer_id}] from '{registered_username}' to '{receiver}': '{clean_filename}'")
+                    send_message(client_sock, {
+                        "status": "SUCCESS",
+                        "command": "OFFER_SENT",
+                        "transfer_id": transfer_id,
+                        "message": f"Transfer request for '{clean_filename}' delivered to '{receiver}'. Awaiting acceptance."
+                    })
+
+                elif cmd in ["CHECK_INCOMING_TRANSFERS", "GET_PENDING_TRANSFERS"]:
+                    target_user = registered_username or msg.get("username", "")
+                    with self._lock:
+                        items = list(self.user_inbox.get(target_user, []))
+                        self.user_inbox[target_user] = []
+                    send_message(client_sock, {
+                        "status": "SUCCESS",
+                        "command": "INBOX_LIST",
+                        "requests": items
+                    })
+
+                elif cmd == "PEER_TRANSFER_RESPONSE":
+                    transfer_id = msg.get("transfer_id", "")
+                    decision = msg.get("decision", "").upper()
+                    reason = msg.get("reason", "Declined by receiver")
+
+                    with self._lock:
+                        t_record = self.pending_transfers.get(transfer_id)
+
+                    if not t_record:
+                        send_message(client_sock, {
+                            "status": "ERROR",
+                            "code": "TRANSFER_NOT_FOUND",
+                            "message": f"Transfer ID '{transfer_id}' not found or already finalized."
+                        })
+                        continue
+
+                    sender = t_record.get("sender")
+
+                    if decision == "REJECT":
+                        with self._lock:
+                            t_record["status"] = "REJECTED"
+                            self.user_inbox.setdefault(sender, []).append({
+                                "type": "TRANSFER_REJECTED",
+                                "transfer_id": transfer_id,
+                                "receiver": registered_username,
+                                "reason": reason
+                            })
+
+                        print_info(f"Peer transfer [{transfer_id}] REJECTED by '{registered_username}' (Sender: '{sender}')", tag="TCP")
+                        log_event(f"Peer transfer [{transfer_id}] rejected by '{registered_username}'")
+                        send_message(client_sock, {
+                            "status": "SUCCESS",
+                            "transfer_id": transfer_id,
+                            "decision": "REJECTED",
+                            "message": "Rejection dispatched to sender."
+                        })
+
+                    elif decision == "ACCEPT":
+                        with self._lock:
+                            t_record["status"] = "ACCEPTED"
+                            self.user_inbox.setdefault(sender, []).append({
+                                "type": "TRANSFER_ACCEPTED",
+                                "transfer_id": transfer_id,
+                                "receiver": registered_username
+                            })
+
+                        print_info(f"Peer transfer [{transfer_id}] ACCEPTED by '{registered_username}' (Sender: '{sender}')", tag="TCP")
+                        log_event(f"Peer transfer [{transfer_id}] accepted by '{registered_username}'")
+                        send_message(client_sock, {
+                            "status": "SUCCESS",
+                            "transfer_id": transfer_id,
+                            "decision": "ACCEPTED",
+                            "message": "Acceptance recorded. Sender notified to begin streaming."
+                        })
+
+                elif cmd == "CHECK_TRANSFER_STATUS":
+                    transfer_id = msg.get("transfer_id", "")
+                    with self._lock:
+                        t_record = self.pending_transfers.get(transfer_id)
+                    if t_record:
+                        send_message(client_sock, {
+                            "status": "SUCCESS",
+                            "command": "TRANSFER_STATUS",
+                            "transfer": t_record
+                        })
+                    else:
+                        send_message(client_sock, {
+                            "status": "ERROR",
+                            "message": f"Transfer '{transfer_id}' not found."
+                        })
+
+                elif cmd == "PEER_UPLOAD_START":
+                    transfer_id = msg.get("transfer_id", "")
+                    with self._lock:
+                        t_record = self.pending_transfers.get(transfer_id)
+
+                    if not t_record:
+                        send_message(client_sock, {"status": "ERROR", "message": "Transfer record not found."})
+                        continue
+
+                    if t_record.get("status") not in ["ACCEPTED", "UPLOADING"]:
+                        send_message(client_sock, {"status": "ERROR", "message": f"Cannot upload: transfer status is '{t_record.get('status')}'."})
+                        continue
+
+                    filename = t_record["filename"]
+                    filesize = t_record["filesize"]
+                    expected_checksum = t_record["checksum"]
+                    receiver = t_record["receiver"]
+
+                    send_message(client_sock, {
+                        "status": "READY",
+                        "transfer_id": transfer_id,
+                        "message": "Server relay ready for peer stream upload."
+                    })
+
+                    try:
+                        t_record["status"] = "UPLOADING"
+                        result = save_transfer_stream(client_sock, transfer_id, filename, filesize, expected_checksum)
+                        if result.get("checksum_verified"):
+                            t_record["status"] = "STAGED"
+                            print_success(f"Peer transfer [{transfer_id}] staged on server & SHA-256 verified ({filesize} bytes)")
+                            log_event(f"Peer transfer [{transfer_id}] staged on server relay")
+
+                            ready_notification = {
+                                "type": "FILE_READY_FOR_RECEIVE",
+                                "transfer_id": transfer_id,
+                                "sender": t_record["sender"],
+                                "filename": filename,
+                                "filesize": filesize,
+                                "checksum": expected_checksum
+                            }
+
+                            with self._lock:
+                                self.user_inbox.setdefault(receiver, []).append(ready_notification)
+
+                            send_message(client_sock, {
+                                "status": "SUCCESS",
+                                "command": "UPLOAD_COMPLETE",
+                                "transfer_id": transfer_id,
+                                "message": "File streamed and SHA-256 verified on server relay."
+                            })
+                        else:
+                            t_record["status"] = "CHECKSUM_FAILED"
+                            send_message(client_sock, {
+                                "status": "ERROR",
+                                "message": "Checksum verification failed during server relay upload."
+                            })
+
+                    except Exception as e:
+                        t_record["status"] = "UPLOAD_FAILED"
+                        print_error(f"Error during peer upload stream [{transfer_id}]: {e}")
+                        send_message(client_sock, {"status": "ERROR", "message": str(e)})
+
+                elif cmd == "PEER_DOWNLOAD_START":
+                    transfer_id = msg.get("transfer_id", "")
+                    with self._lock:
+                        t_record = self.pending_transfers.get(transfer_id)
+
+                    if not t_record:
+                        send_message(client_sock, {"status": "ERROR", "message": "Transfer record not found."})
+                        continue
+
+                    if t_record.get("status") not in ["STAGED", "DOWNLOADING"]:
+                        send_message(client_sock, {"status": "ERROR", "message": f"Transfer not ready for download (status: '{t_record.get('status')}')."})
+                        continue
+
+                    filename = t_record["filename"]
+                    filesize = t_record["filesize"]
+                    checksum = t_record["checksum"]
+
+                    try:
+                        staged_path = get_safe_transfer_path(transfer_id, filename)
+                        if not staged_path.exists() or not staged_path.is_file():
+                            send_message(client_sock, {"status": "ERROR", "message": "Staged file not found on server."})
+                            continue
+
+                        send_message(client_sock, {
+                            "status": "READY",
+                            "transfer_id": transfer_id,
+                            "filename": filename,
+                            "filesize": filesize,
+                            "checksum": checksum
+                        })
+
+                        t_record["status"] = "DOWNLOADING"
+                        with open(staged_path, "rb") as f:
+                            while chunk := f.read(CHUNK_SIZE):
+                                client_sock.sendall(chunk)
+
+                        print_success(f"Streamed staged file [{transfer_id}] ({filesize} bytes) to receiver '{registered_username}'")
+                        log_event(f"Streamed staged file [{transfer_id}] to receiver '{registered_username}'")
+
+                    except Exception as e:
+                        print_error(f"Error streaming peer transfer [{transfer_id}] to receiver: {e}")
+                        send_message(client_sock, {"status": "ERROR", "message": str(e)})
+
+                elif cmd == "PEER_DOWNLOAD_COMPLETE":
+                    transfer_id = msg.get("transfer_id", "")
+                    with self._lock:
+                        t_record = self.pending_transfers.get(transfer_id)
+
+                    if t_record:
+                        filename = t_record.get("filename", "")
+                        sender = t_record.get("sender")
+                        t_record["status"] = "COMPLETED"
+                        cleanup_transfer_file(transfer_id, filename)
+
+                        with self._lock:
+                            self.user_inbox.setdefault(sender, []).append({
+                                "type": "TRANSFER_DELIVERED",
+                                "transfer_id": transfer_id,
+                                "receiver": registered_username,
+                                "filename": filename
+                            })
+
+                        print_success(f"Peer transfer [{transfer_id}] successfully completed and delivered to '{registered_username}'!")
+                        log_event(f"Peer transfer [{transfer_id}] successfully delivered to '{registered_username}'")
+
+                    send_message(client_sock, {
+                        "status": "SUCCESS",
+                        "message": "Transfer finalized and acknowledged by server."
+                    })
+
                 elif cmd == "QUIT":
                     send_message(client_sock, {"status": "SUCCESS", "message": "Goodbye"})
                     break
@@ -276,7 +583,10 @@ class TCPServer:
                 self.active_clients.pop(addr_str, None)
                 if registered_username:
                     self.active_usernames.discard(registered_username)
+                    self.username_to_session.pop(registered_username, None)
+                    self.user_inbox.pop(registered_username, None)
                 self.clients_registry.pop(session_id, None)
+                self.session_to_socket.pop(session_id, None)
 
             if registered_username:
                 print_info(f"Client disconnected: {addr_str} (User: '{registered_username}', Session: {session_id})", tag="TCP")

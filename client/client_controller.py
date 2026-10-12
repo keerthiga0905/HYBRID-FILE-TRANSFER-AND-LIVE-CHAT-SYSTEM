@@ -175,6 +175,88 @@ class ClientController:
 
         return res
 
+    def list_tcp_online_users(self) -> List[Dict[str, Any]]:
+        """Queries TCP server for active connected peers."""
+        if not self.tcp_connected or not self.tcp_client:
+            return []
+        users = self.tcp_client.list_online_users()
+        self._add_log("TCP", f"Fetched active TCP online peers: {len(users)} found")
+        return users
+
+    def send_peer_file(self, receiver: str, file_path: str) -> Dict[str, Any]:
+        """Module 2: Sender initiates peer transfer offer and streams file upon acceptance."""
+        if not self.tcp_connected or not self.tcp_client:
+            return {"success": False, "error": "Not connected to TCP server"}
+
+        self._add_log("TCP", f"Offering peer file transfer to '{receiver}' for '{Path(file_path).name}'...")
+        res = self.tcp_client.send_file_to_peer(receiver, file_path)
+
+        record = {
+            "timestamp": get_timestamp(),
+            "filename": Path(file_path).name,
+            "direction": f"Peer Send to {receiver}",
+            "protocol": "TCP",
+            "size": res.get("filesize", Path(file_path).stat().st_size if Path(file_path).exists() else 0),
+            "status": "Completed" if res.get("success") else "Failed",
+            "checksum_verified": res.get("success", False)
+        }
+        with self._lock:
+            self.transfer_history.insert(0, record)
+
+        if res.get("success"):
+            self._add_log("SUCCESS", f"Peer file '{record['filename']}' successfully staged & delivered to '{receiver}'!")
+        else:
+            self._add_log("ERROR", f"Peer transfer to '{receiver}' failed: {res.get('error')}")
+
+        return res
+
+    def check_incoming_transfers(self) -> List[Dict[str, Any]]:
+        """Module 2: Receiver checks pending transfer offers."""
+        if not self.tcp_connected or not self.tcp_client:
+            return []
+        return self.tcp_client.check_incoming_transfers()
+
+    def accept_peer_transfer(self, transfer_id: str, filename: str, filesize: int, checksum: str, custom_downloads_dir: Optional[str] = None) -> Dict[str, Any]:
+        """Module 2: Receiver accepts and downloads file."""
+        if not self.tcp_connected or not self.tcp_client:
+            return {"success": False, "error": "Not connected to TCP server"}
+
+        self._add_log("TCP", f"Accepting and downloading peer file '{filename}' [{transfer_id}]...")
+        res = self.tcp_client.accept_and_receive_transfer(
+            transfer_id=transfer_id,
+            filename=filename,
+            filesize=filesize,
+            checksum=checksum,
+            custom_downloads_dir=custom_downloads_dir
+        )
+
+        record = {
+            "timestamp": get_timestamp(),
+            "filename": filename,
+            "direction": "Peer Receive",
+            "protocol": "TCP",
+            "size": filesize,
+            "status": "Completed" if res.get("success") else "Failed",
+            "checksum_verified": res.get("checksum_verified", False)
+        }
+        with self._lock:
+            self.transfer_history.insert(0, record)
+
+        if res.get("success"):
+            self._add_log("SUCCESS", f"Peer file '{filename}' received and 100% SHA-256 verified!")
+        else:
+            self._add_log("ERROR", f"Failed to receive peer file '{filename}': {res.get('error')}")
+
+        return res
+
+    def reject_peer_transfer(self, transfer_id: str, reason: str = "Declined") -> Dict[str, Any]:
+        """Module 2: Receiver rejects transfer offer."""
+        if not self.tcp_connected or not self.tcp_client:
+            return {"success": False, "error": "Not connected to TCP server"}
+        res = self.tcp_client.respond_to_transfer(transfer_id, "REJECT", reason=reason)
+        self._add_log("WARN", f"Rejected peer file transfer [{transfer_id}]: {reason}")
+        return res
+
     def send_chat_message(self, message: str) -> Dict[str, Any]:
         """Sends UDP MSG datagram to server."""
         if not self.udp_connected or not self.udp_client:

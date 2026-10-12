@@ -150,6 +150,127 @@ python -m unittest tests/test_tcp.py
 
 ---
 
+## 📁 Module 2: Complete TCP-Based Peer File Transfer System
+
+### 1. Module 2 Objectives & Architecture
+Module 2 enables real-time peer-to-peer file transfer between any two connected users mediated by the reliable TCP server relay without breaking Module 1.
+
+```text
+SENDER (Alice)                   TCP SERVER (Relay)                 RECEIVER (Bob)
+     │                                    │                                 │
+     │ 1. GET_USERS                       │                                 │
+     ├───────────────────────────────────>│                                 │
+     │<── [Bob (Online)] ─────────────────┤                                 │
+     │                                    │                                 │
+     │ 2. PEER_TRANSFER_OFFER             │                                 │
+     │    (filename, size, SHA-256, TID)  │                                 │
+     ├───────────────────────────────────>│ [Recorded in Inbox]             │
+     │<── OFFER_SENT ─────────────────────┤                                 │
+     │                                    │ 3. CHECK_INCOMING_TRANSFERS     │
+     │                                    │<────────────────────────────────┤
+     │                                    ├──── INBOX_LIST (Offer) ────────>│
+     │                                    │                                 │
+     │                                    │ 4. PEER_TRANSFER_RESPONSE       │
+     │                                    │    (TID, decision: "ACCEPT")    │
+     │                                    │<────────────────────────────────┤
+     │                                    ├──── SUCCESS ───────────────────>│
+     │ 5. CHECK_STATUS (ACCEPTED)         │                                 │
+     ├───────────────────────────────────>│                                 │
+     │                                    │                                 │
+     │ 6. PEER_UPLOAD_START (TID)         │                                 │
+     ├───────────────────────────────────>│                                 │
+     │<── READY ──────────────────────────┤                                 │
+     │=== 4096-byte chunk stream =========>│ (Staged & SHA-256 Verified)     │
+     │<── UPLOAD_COMPLETE ────────────────┤                                 │
+     │                                    │                                 │
+     │                                    │ 7. PEER_DOWNLOAD_START (TID)    │
+     │                                    │<────────────────────────────────┤
+     │                                    ├──── READY ─────────────────────>│
+     │                                    │=== 4096-byte chunk stream ======>│
+     │                                    │                                 │
+     │                                    │ 8. Calculate SHA-256 Checksum   │
+     │                                    │    verify_checksum() MATCH!     │
+     │                                    │    Rename .part to final file   │
+     │                                    │                                 │
+     │                                    │ 9. PEER_DOWNLOAD_COMPLETE       │
+     │                                    │<────────────────────────────────┤
+     │                                    │ [Staged file cleaned up]        │
+     │                                    ├──── Finalized ACK ─────────────>│
+```
+
+---
+
+### 2. Core Features Implemented
+
+#### Sender Features:
+1. **Show Connected Users:** Queries `GET_USERS` and displays numbered list of online peers.
+2. **Choose Receiver:** Prompt to choose receiver by username or number.
+3. **File Selection:** Choose path directly or type `browse` for GUI file dialog.
+4. **Any File Type Supported:** Pure binary transfer supporting `PDF`, `DOCX`, `TXT`, `JPG`, `PNG`, `ZIP`, `MP4`, and more.
+5. **Metadata Transmission:** Sends `filename`, `filesize`, unique `transfer_id`, and `SHA-256` checksum.
+6. **Live Progress:** Visual progress bar with bytes transferred, percent, and MB/s speed.
+7. **Receiver Notification:** Receiver's inbox is immediately notified of incoming request.
+
+#### Receiver Features:
+1. **Request Inspection:** Displays sender's username, filename, size, transfer ID, and SHA-256 checksum.
+2. **Accept or Reject:** Receiver can accept (`[A]`) or reject (`[R]`).
+3. **Transfer Only Upon Acceptance:** Zero file bytes are streamed if receiver declines.
+4. **Configurable Downloads Directory:** Default is `storage/downloads/`, or user can specify custom path.
+5. **Live Download Progress:** Visual progress bar with percentage, bytes received, and speed.
+6. **SHA-256 Verification:** Receiver computes SHA-256 on `.part` file and compares with sender's checksum using `hmac.compare_digest`.
+7. **Integrity Guaranteed:** Success reported only after 100% byte receipt and checksum match.
+
+---
+
+### 3. Step-by-Step Windows PowerShell Commands to Test Module 2
+
+Open three separate **Windows PowerShell** windows:
+
+#### Terminal 1: TCP Server
+```powershell
+python server/tcp_server.py
+```
+
+#### Terminal 2: Client 1 (Alice - Sender)
+```powershell
+python client/client.py
+```
+- Username: `Alice`
+
+#### Terminal 3: Client 2 (Bob - Receiver)
+```powershell
+python client/client.py
+```
+- Username: `Bob`
+
+---
+
+#### Step 4: Perform Peer File Transfer
+1. In **Terminal 2 (Alice)**:
+   - Select option `[5] Send File to User (Peer-to-Peer Transfer)`.
+   - Select receiver: `Bob`.
+   - Enter file path: `storage/sample_test_1mb.dat` (or any image, pdf, text, or zip file).
+   - Alice computes SHA-256 and submits offer.
+
+2. In **Terminal 3 (Bob)**:
+   - Select option `[6] Check Incoming Transfer Requests (Receive/Verify)`.
+   - Bob sees incoming transfer offer from Alice.
+   - Type `A` to **ACCEPT**.
+   - Press **Enter** for default `storage/downloads/` directory.
+
+3. **Observe Live Streaming & Integrity Verification:**
+   - Alice streams 4096-byte chunks with live progress.
+   - Bob receives 4096-byte chunks with live progress.
+   - Bob calculates SHA-256 of received file and verifies exact match with Alice's original file!
+
+---
+
+### 4. Running Automated Tests for Module 2
+```powershell
+python -m unittest tests/test_file_transfer.py
+```
+*All 11 tests pass in < 1 second, validating small text files, binary PNG images, PDF documents, 2 MB large binary archives, receiver rejection, offline receivers, and custom downloads directory.*
+
 ---
 
 ## 🏗️ System Architecture

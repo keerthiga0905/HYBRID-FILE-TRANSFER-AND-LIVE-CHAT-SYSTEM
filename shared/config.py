@@ -24,11 +24,13 @@ DEFAULT_SIMULATED_LOSS_RATE = 0.0  # Default 0% simulated packet loss (range 0.0
 STORAGE_DIR = BASE_DIR / "storage"
 UPLOADS_DIR = STORAGE_DIR / "uploads"
 DOWNLOADS_DIR = STORAGE_DIR / "downloads"
+TRANSFERS_DIR = STORAGE_DIR / "transfers"
 LOGS_DIR = BASE_DIR / "logs"
 
 # Ensure directories exist
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+TRANSFERS_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Protocol Delimiters
