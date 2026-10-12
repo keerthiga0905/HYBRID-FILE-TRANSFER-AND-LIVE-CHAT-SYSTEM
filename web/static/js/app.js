@@ -255,7 +255,12 @@ async function fetchChatMessages() {
             }
 
             box.innerHTML = '';
+            const seenMessages = new Set();
             data.messages.forEach(m => {
+                const key = `${m.sender}-${m.sequence}-${m.message}`;
+                if (seenMessages.has(key)) return;
+                seenMessages.add(key);
+
                 const isMine = m.sender === username;
                 const bubble = document.createElement('div');
                 bubble.className = `chat-bubble ${isMine ? 'mine' : 'theirs'}`;

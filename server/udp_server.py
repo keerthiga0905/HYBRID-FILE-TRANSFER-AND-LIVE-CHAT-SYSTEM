@@ -166,12 +166,15 @@ class UDPServer:
         except Exception as e:
             log_event(f"Error sending UDP datagram to {addr}: {e}", "error")
 
-    def _broadcast_to_online_users(self, broadcast_data: Dict[str, Any], sender_addr: tuple[str, int]) -> None:
-        """Broadcasts UDP datagram to all registered online clients."""
+    def _broadcast_to_online_users(self, broadcast_data: Dict[str, Any], sender_addr: tuple[str, int] | None = None) -> None:
+        """Broadcasts UDP datagram to all registered online clients (excluding sender)."""
         raw_bytes = json.dumps(broadcast_data).encode("utf-8")
         with registry._lock:
             for user, data in registry.clients.items():
                 if data["status"] == "ONLINE":
+                    # Avoid echoing message back to the sender endpoint
+                    if sender_addr and (data["ip"], data["port"]) == sender_addr:
+                        continue
                     try:
                         self.udp_socket.sendto(raw_bytes, (data["ip"], data["port"]))
                     except Exception as e:

@@ -105,8 +105,21 @@ class UDPClient:
 
                         elif msg_type == "BROADCAST":
                             seq = int(payload.get("sequence", 0))
+                            sender = payload.get("sender", "Unknown")
 
-                            # Duplicate message detection safeguard
+                            # Check if message already exists in history (e.g. locally added on send)
+                            already_present = False
+                            for m in self.messages_history:
+                                if m.get("sequence") == seq and m.get("sender") == sender:
+                                    m["status"] = "Delivered"
+                                    already_present = True
+                                    break
+
+                            if already_present:
+                                self.processed_sequences.add(seq)
+                                continue
+
+                            # Duplicate sequence detection safeguard
                             if seq in self.processed_sequences:
                                 print_warning(f"Duplicate UDP message [seq={seq}] detected - Ignored display.")
                                 continue
@@ -114,7 +127,7 @@ class UDPClient:
                             self.processed_sequences.add(seq)
                             record = {
                                 "sequence": seq,
-                                "sender": payload.get("sender", "Unknown"),
+                                "sender": sender,
                                 "message": payload.get("message", ""),
                                 "timestamp": payload.get("timestamp", get_timestamp()),
                                 "status": "Delivered"
@@ -204,6 +217,7 @@ class UDPClient:
         }
 
         with self._lock:
+            self.processed_sequences.add(seq)
             self.messages_history.append(local_record)
             self.pending_acks[seq] = {
                 "payload": msg_payload,
