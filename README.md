@@ -273,6 +273,118 @@ python -m unittest tests/test_file_transfer.py
 
 ---
 
+## 🔄 Module 3: Reliable File Transfer Management and Resume Support
+
+### 1. Module 3 Objectives & Deliverables
+Module 3 adds robust reliability, fault tolerance, and resumption capabilities to both file uploads and downloads. Network disconnections, client crashes, or intentional interrupts no longer force files to restart from byte 0.
+
+* **Unique Transfer Identifiers:** Every transfer is assigned an immutable 12-hex Transfer ID (`uuid.uuid4().hex[:12]`).
+* **Partial File Staging (`.part` extension):** All incomplete uploads staged on the server and incomplete downloads on the client are saved with a `.part` extension (e.g. `resume_test_2mb.dat.part`).
+* **Metadata Persistence (`.meta.json`):** Tracks `transfer_id`, `filename`, `filesize`, `checksum`, `sender`, `receiver`, `bytes_stored`, `status`, and timestamps across restarts.
+* **Verified Resume Offset Calculation:** On reconnect or retry, the receiver/server inspects the actual byte count stored on disk (`get_partial_transfer_offset()`), returns the verified offset, seeks the file pointer (`f.seek(offset)`), and streams only remaining bytes in append mode (`"ab"`).
+* **Strict Permission & Identity Validation:**
+  - Validates transfer ID exists.
+  - Verifies file identity (`filename`) and exact expected `filesize`.
+  - Enforces sender/receiver access control: unauthorized third-party clients attempting to resume another user's transfer receive `PERMISSION_DENIED`.
+* **Zero Missing or Duplicated Bytes:** Chunk offsets ensure seamless continuation from exact byte boundaries.
+* **Post-Transfer SHA-256 Verification:** Constant-time checksum calculation (`hmac.compare_digest`) on the assembled file after transfer completion.
+* **Conditional Atomic File Renaming:** Incomplete `.part` files are renamed to their final filenames **strictly after** checksum verification succeeds. If a checksum fails, success is **never reported** and `.part` is preserved.
+* **File Transfers Registry (`LIST_TRANSFERS`):** Clients can query available transfers, viewing `transfer_id`, `filename`, `filesize`, `sender`, `receiver`, `bytes_stored`, and current `status`.
+* **Transfer Cancellation (`CANCEL_TRANSFER`):** Senders and receivers can cancel transfers at any time, cleaning up staging files and preventing unauthorized stream operations.
+
+---
+
+### 2. Resume Architecture Sequence Diagram
+
+```text
+SENDER (Alice)                   TCP SERVER (Relay)                 RECEIVER (Bob)
+     │                                    │                                 │
+     │ 1. INTERRUPTED UPLOAD              │                                 │
+     │=== Streamed 1,048,576 bytes ======>│ (Connection Dropped / Reset)   │
+     │                                    │ [Preserves .part & .meta.json]  │
+     │                                    │                                 │
+     │ 2. RESUME_PEER_UPLOAD              │                                 │
+     │    (TID, filename, size, checksum) │                                 │
+     ├───────────────────────────────────>│ Validate Permissions & Identity│
+     │                                    │ Check disk: 1,048,576 bytes     │
+     │<── RESUME_READY (offset=1048576) ──┤                                 │
+     │                                    │                                 │
+     │ 3. Alice seeks f.seek(1048576)     │ Server opens in "ab" append mode│
+     │=== Streams remaining 1MB =========>│ SHA-256 Verified on server      │
+     │<── UPLOAD_COMPLETE ────────────────┤                                 │
+     │                                    │                                 │
+     │                                    │ 4. RESUME_PEER_DOWNLOAD         │
+     │                                    │    (TID, offset=1048576)        │
+     │                                    │<────────────────────────────────┤
+     │                                    ├──── RESUME_READY ──────────────>│
+     │                                    │ Bob seeks .part in "ab" mode    │
+     │                                    │=== Streams remaining 1MB ======>│
+     │                                    │                                 │
+     │                                    │ 5. Calculate Full File SHA-256  │
+     │                                    │    Match confirmed!             │
+     │                                    │    Rename .part -> final file   │
+     │                                    │ 6. PEER_DOWNLOAD_COMPLETE       │
+     │                                    │<────────────────────────────────┤
+     │                                    │ [Clean up staging files]        │
+     │                                    ├──── Finalized ACK ─────────────>│
+```
+
+---
+
+### 3. Step-by-Step PowerShell Guide: Testing Resumable Transfers
+
+#### Step 1: Start TCP Server
+```powershell
+python server/tcp_server.py
+```
+
+#### Step 2: Open Client A (Alice - Sender)
+```powershell
+python client/client.py
+```
+- Username: `Alice`
+
+#### Step 3: Open Client B (Bob - Receiver)
+```powershell
+python client/client.py
+```
+- Username: `Bob`
+
+#### Step 4: Initiate Transfer & Simulate Network Interruption
+1. In **Alice's terminal**, choose option `[5]` to send a large file (e.g., `storage/sample_test_1mb.dat`) to `Bob`.
+2. In **Bob's terminal**, choose option `[6]` and accept (`A`).
+3. Press `Ctrl+C` or terminate the connection during transfer to simulate a real-world network failure.
+4. Observe that `storage/transfers/*.part` and `storage/downloads/*.part` remain on disk with partial byte counts.
+
+#### Step 5: Reconnect & Resume
+1. In **Alice's terminal**, re-launch `python client/client.py` and register as `Alice`.
+2. Choose option `[7] View Active & Interrupted Transfers Registry`.
+   - Inspect the transfer ID, filename, total bytes, stored bytes, and `INTERRUPTED` status.
+3. Choose option `[8] Resume Interrupted File Transfer`.
+   - Enter the Transfer ID and select `[U] Resume Upload`.
+   - Alice queries the server's partial offset, seeks to that exact byte offset, and sends only the remaining chunks!
+4. In **Bob's terminal**, select option `[8]` and select `[D] Resume Download`.
+   - Bob streams remaining bytes from the server staging relay.
+   - Bob verifies the SHA-256 checksum across the entire reconstructed file.
+   - Upon checksum match, Bob's client atomically renames the `.part` file to the original filename!
+
+---
+
+### 4. Running Automated Tests for Module 3
+```powershell
+python -m unittest tests/test_resume.py -v
+```
+*All 7 tests pass, verifying:*
+1. Direct server upload resume from `.part` offset.
+2. Direct client download resume from `.part` offset.
+3. Peer upload resume from 1MB offset on server relay staging.
+4. Peer download resume from 1MB offset on receiver downloads.
+5. Permission validation rejecting unauthorized third-party attempts (`PERMISSION_DENIED`).
+6. Checksum failure rejection preventing file renaming when corruption occurs.
+7. Transfer listing (`LIST_TRANSFERS`) and authorized cancellation (`CANCEL_TRANSFER`).
+
+---
+
 ## 🏗️ System Architecture
 
 ```text
@@ -430,7 +542,7 @@ Connection is now established.
 
 ---
 
-## 🧪 Automated Unit Test Suite (24 Passed)
+## 🧪 Automated Unit Test Suite (40 Passed)
 
 To run the complete automated test suite:
 ```bash

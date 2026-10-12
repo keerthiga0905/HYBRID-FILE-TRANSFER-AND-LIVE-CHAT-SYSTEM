@@ -15,3 +15,11 @@ logs/*.log
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# Storage runtime files & staging
+storage/transfers/*
+!storage/transfers/.gitkeep
+storage/custom_inbox/
+storage/step_test.txt
+*.part
+*.meta.json

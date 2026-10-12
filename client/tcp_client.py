@@ -361,9 +361,10 @@ class TCPClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def stream_peer_upload(self, transfer_id: str, file_path_str: str, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+    def stream_peer_upload(self, transfer_id: str, file_path_str: str, resume: bool = False, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
         """
         Streams binary file in 4096-byte chunks to server staging relay for transfer_id.
+        Supports resuming from server's verified offset if previously interrupted.
         Tracks progress, bytes sent, speed, and status.
         """
         if not self.is_connected or not self.sock:
@@ -375,37 +376,55 @@ class TCPClient:
 
         filesize = file_path.stat().st_size
         filename = sanitize_filename(file_path.name)
+        checksum = calculate_sha256(file_path)
 
-        send_message(self.sock, {"command": "PEER_UPLOAD_START", "transfer_id": transfer_id})
+        cmd = "RESUME_PEER_UPLOAD" if resume else "PEER_UPLOAD_START"
+        req = {
+            "command": cmd,
+            "transfer_id": transfer_id,
+            "filename": filename,
+            "filesize": filesize,
+            "checksum": checksum,
+            "resume": resume
+        }
+        send_message(self.sock, req)
         ready_ack = receive_message(self.sock)
         if not ready_ack or ready_ack.get("status") != "READY":
-            return {"success": False, "error": ready_ack.get("message", "Server not ready for upload")}
+            return {"success": False, "error": ready_ack.get("message", "Server not ready for upload") if ready_ack else "No response"}
 
-        print_info(f"Streaming '{filename}' ({filesize} bytes) in {CHUNK_SIZE}-byte chunks...", tag="TCP")
-        sent_bytes = 0
+        offset = int(ready_ack.get("offset", 0)) if (resume or ready_ack.get("offset")) else 0
+        if offset > 0:
+            print_info(f"Resuming upload of '{filename}' from verified byte offset {offset}/{filesize}...", tag="TCP")
+        else:
+            print_info(f"Streaming '{filename}' ({filesize} bytes) in {CHUNK_SIZE}-byte chunks...", tag="TCP")
+
+        sent_bytes = offset
         start_time = datetime.now()
         speed = 0.0
 
         try:
             with open(file_path, "rb") as f:
+                if offset > 0:
+                    f.seek(offset)
                 while chunk := f.read(CHUNK_SIZE):
                     self.sock.sendall(chunk)
                     sent_bytes += len(chunk)
                     elapsed = (datetime.now() - start_time).total_seconds()
-                    speed = (sent_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                    speed = ((sent_bytes - offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
                     if progress_callback:
                         progress_callback(sent_bytes, filesize, speed)
 
             # Receive completion confirmation from server relay
             result = receive_message(self.sock)
             if result and result.get("status") == "SUCCESS":
-                print_success(f"File streamed & staged successfully! [{transfer_id}]")
+                print_success(f"File streamed & staged successfully! [{transfer_id}] (Resumed from {offset} bytes)")
                 return {
                     "success": True,
                     "transfer_id": transfer_id,
                     "filename": filename,
                     "bytes_sent": sent_bytes,
                     "filesize": filesize,
+                    "offset_resumed": offset,
                     "speed_mbs": round(speed, 2),
                     "status": "STAGED_ON_SERVER"
                 }
@@ -416,12 +435,18 @@ class TCPClient:
 
         except Exception as e:
             print_error(f"Exception during peer stream upload: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "bytes_sent": sent_bytes, "interrupted": True}
 
-    def stream_peer_download(self, transfer_id: str, filename: str, filesize: int, expected_checksum: str, custom_downloads_dir: Optional[Path | str] = None, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+    def resume_peer_upload(self, transfer_id: str, file_path_str: str, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """Resumes an interrupted peer file upload from server's verified byte offset."""
+        return self.stream_peer_upload(transfer_id, file_path_str, resume=True, progress_callback=progress_callback)
+
+    def stream_peer_download(self, transfer_id: str, filename: str, filesize: int, expected_checksum: str, custom_downloads_dir: Optional[Path | str] = None, resume: bool = False, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
         """
         Streams binary file in 4096-byte chunks from server staging relay for transfer_id.
-        Saves into configured downloads directory, verifies SHA-256, and reports success.
+        Stores incomplete files with a .part extension and preserves them on interruption.
+        Supports resuming from client's verified byte offset.
+        Verifies full file using SHA-256 and renames .part to final filename only after verification.
         """
         if not self.is_connected or not self.sock:
             return {"success": False, "error": "TCP Client is not connected"}
@@ -430,35 +455,54 @@ class TCPClient:
         dest_path = get_safe_download_path(clean_name, custom_downloads_dir)
         part_path = dest_path.parent / (dest_path.name + ".part")
 
-        send_message(self.sock, {"command": "PEER_DOWNLOAD_START", "transfer_id": transfer_id})
+        # Determine verified resume offset from local .part file if it exists
+        offset = 0
+        if (resume or part_path.exists()) and part_path.exists():
+            offset = part_path.stat().st_size
+            if offset >= filesize:
+                offset = 0
+
+        cmd = "RESUME_PEER_DOWNLOAD" if offset > 0 else "PEER_DOWNLOAD_START"
+        send_message(self.sock, {
+            "command": cmd,
+            "transfer_id": transfer_id,
+            "offset": offset
+        })
         ready_ack = receive_message(self.sock)
         if not ready_ack or ready_ack.get("status") != "READY":
-            return {"success": False, "error": ready_ack.get("message", "Server not ready for download")}
+            return {"success": False, "error": ready_ack.get("message", "Server not ready for download") if ready_ack else "No response"}
 
-        print_info(f"Downloading '{clean_name}' ({filesize} bytes) from server relay...", tag="TCP")
-        received_bytes = 0
+        verified_offset = int(ready_ack.get("offset", 0))
+        if verified_offset > 0:
+            print_info(f"Resuming download of '{clean_name}' from verified byte offset {verified_offset}/{filesize}...", tag="TCP")
+        else:
+            print_info(f"Downloading '{clean_name}' ({filesize} bytes) from server relay...", tag="TCP")
+
+        mode = "ab" if (verified_offset > 0 and part_path.exists()) else "wb"
+        received_bytes = verified_offset
         start_time = datetime.now()
 
         try:
-            with open(part_path, "wb") as f:
+            with open(part_path, mode) as f:
                 while received_bytes < filesize:
                     remaining = filesize - received_bytes
                     to_read = min(CHUNK_SIZE, remaining)
                     chunk = self.sock.recv(to_read)
                     if not chunk:
-                        raise ConnectionError("Connection lost during peer download stream")
+                        raise ConnectionError(f"Connection lost during peer download stream at {received_bytes}/{filesize} bytes")
                     f.write(chunk)
                     received_bytes += len(chunk)
                     elapsed = (datetime.now() - start_time).total_seconds()
-                    speed = (received_bytes / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
+                    speed = ((received_bytes - verified_offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
                     if progress_callback:
                         progress_callback(received_bytes, filesize, speed)
 
-            # Calculate SHA-256 and verify against sender's checksum
+            # Calculate SHA-256 over entire assembled file
             actual_checksum = calculate_sha256(part_path)
             checksum_valid = verify_checksum(expected_checksum, actual_checksum)
 
             if checksum_valid:
+                # Rename the partial file to its final filename only after successful verification!
                 if dest_path.exists():
                     dest_path.unlink()
                 part_path.rename(dest_path)
@@ -475,12 +519,12 @@ class TCPClient:
                     "filesize": filesize,
                     "saved_path": str(dest_path),
                     "checksum": actual_checksum,
-                    "checksum_verified": True
+                    "checksum_verified": True,
+                    "offset_resumed": verified_offset
                 }
             else:
-                if part_path.exists():
-                    part_path.unlink()
-                print_error(f"Received file '{clean_name}' failed SHA-256 checksum verification!")
+                # If checksum fails, DO NOT rename partial file and DO NOT report success!
+                print_error(f"Received file '{clean_name}' failed SHA-256 checksum verification! Preserving .part file for inspection.")
                 return {
                     "success": False,
                     "error": "Checksum verification failed - file corrupted or altered in transit",
@@ -490,12 +534,44 @@ class TCPClient:
                 }
 
         except Exception as e:
-            if part_path.exists():
-                try:
-                    part_path.unlink()
-                except Exception:
-                    pass
-            print_error(f"Exception during peer download stream: {e}")
+            # Preserve partial .part file for resume on connection drop
+            print_error(f"Download stream interrupted at {received_bytes}/{filesize} bytes: {e}. Preserved partial file '{part_path.name}'.")
+            return {
+                "success": False,
+                "error": str(e),
+                "bytes_received": received_bytes,
+                "interrupted": True
+            }
+
+    def resume_peer_download(self, transfer_id: str, filename: str, filesize: int, expected_checksum: str, custom_downloads_dir: Optional[Path | str] = None, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:
+        """Resumes an interrupted peer file download from client's verified byte offset."""
+        return self.stream_peer_download(transfer_id, filename, filesize, expected_checksum, custom_downloads_dir=custom_downloads_dir, resume=True, progress_callback=progress_callback)
+
+    def list_all_transfers(self) -> Optional[List[Dict[str, Any]]]:
+        """Requests list of all transfers (active, staged, completed, interrupted) from server."""
+        if not self.is_connected or not self.sock:
+            return None
+        try:
+            send_message(self.sock, {"command": "LIST_TRANSFERS"})
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return resp.get("transfers", [])
+            return []
+        except Exception as e:
+            print_error(f"Error fetching transfer list: {e}")
+            return None
+
+    def cancel_transfer(self, transfer_id: str) -> Dict[str, Any]:
+        """Cancels an active or pending transfer if caller is the sender or receiver."""
+        if not self.is_connected or not self.sock:
+            return {"success": False, "error": "TCP Client is not connected"}
+        try:
+            send_message(self.sock, {"command": "CANCEL_TRANSFER", "transfer_id": transfer_id})
+            resp = receive_message(self.sock)
+            if resp and resp.get("status") == "SUCCESS":
+                return {"success": True, "message": resp.get("message")}
+            return {"success": False, "error": resp.get("message", "Cancellation failed") if resp else "No response"}
+        except Exception as e:
             return {"success": False, "error": str(e)}
 
     def send_file_to_peer(self, receiver: str, file_path_str: str, timeout: float = 30.0, progress_callback: Optional[Callable[[int, int, float], None]] = None) -> Dict[str, Any]:

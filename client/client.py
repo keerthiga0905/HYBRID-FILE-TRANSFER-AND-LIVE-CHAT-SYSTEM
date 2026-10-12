@@ -231,6 +231,133 @@ def handle_check_incoming_transfers(client: TCPClient) -> None:
                 print_error(f"Failed to submit rejection: {rej_res.get('error')}")
 
 
+def handle_list_transfers(client: TCPClient) -> None:
+    """Module 3: Displays transfer list showing available files, size, sender, receiver, stored bytes, and status."""
+    print_info("Fetching transfers registry from server...", tag="TCP")
+    transfers = client.list_all_transfers()
+    if not transfers:
+        print_info("No transfers recorded yet.", tag="TCP")
+        return
+
+    print(f"\n{TermColor.BOLD}{TermColor.CYAN}--- File Transfers Registry ---{TermColor.RESET}")
+    print(f"{'Transfer ID':<14} | {'Filename':<20} | {'Size':<10} | {'Stored':<10} | {'Sender':<14} | {'Receiver':<14} | {'Status':<12}")
+    print("-" * 105)
+    for t in transfers:
+        tid = t.get("transfer_id", "")[:12]
+        fname = t.get("filename", "")[:18]
+        fsize = f"{t.get('filesize', 0):,} B"
+        stored = f"{t.get('bytes_stored', 0):,} B"
+        sender = t.get("sender", "")[:12]
+        receiver = t.get("receiver", "")[:12]
+        status = t.get("status", "")
+        status_color = TermColor.GREEN if status in ["COMPLETED", "STAGED"] else (TermColor.RED if "FAIL" in status or status == "CANCELLED" else TermColor.YELLOW)
+        print(f"{tid:<14} | {fname:<20} | {fsize:<10} | {stored:<10} | {sender:<14} | {receiver:<14} | {status_color}{status:<12}{TermColor.RESET}")
+
+
+def handle_resume_transfer(client: TCPClient) -> None:
+    """Module 3: Resumes interrupted upload or download using verified byte offset and SHA-256 verification."""
+    print_info("Fetching resumable transfers...", tag="TCP")
+    transfers = client.list_all_transfers()
+    if not transfers:
+        print_warning("No transfers found on server.")
+        return
+
+    resumable = [
+        t for t in transfers
+        if t.get("status") not in ["COMPLETED", "CANCELLED", "REJECTED"] and (t.get("sender") == client.username or t.get("receiver") == client.username)
+    ]
+
+    if not resumable:
+        print_info("No interrupted or resumable transfers found for your user.", tag="TCP")
+        return
+
+    print(f"\n{TermColor.BOLD}--- Resumable Transfers for {client.username} ---{TermColor.RESET}")
+    for idx, t in enumerate(resumable, 1):
+        role = "Sender (Upload)" if t.get("sender") == client.username else "Receiver (Download)"
+        print(f"  [{idx}] {t.get('transfer_id')} | {t.get('filename')} ({t.get('filesize'):,} bytes) | Stored: {t.get('bytes_stored'):,} | Role: {role} | Status: {t.get('status')}")
+
+    sel = input(f"\nSelect transfer to resume [1-{len(resumable)}]: ").strip()
+    if not sel.isdigit() or not (1 <= int(sel) <= len(resumable)):
+        print_error("Invalid selection.")
+        return
+
+    target_t = resumable[int(sel) - 1]
+    tid = target_t.get("transfer_id")
+    fname = target_t.get("filename")
+    fsize = int(target_t.get("filesize", 0))
+    checksum = target_t.get("checksum", "")
+
+    if target_t.get("sender") == client.username:
+        filepath = pick_file_path()
+        if not filepath or not Path(filepath).exists():
+            print_error(f"Local file not found: '{filepath}'")
+            return
+        print_info(f"Resuming upload of [{tid}]...", tag="TCP")
+        res = client.resume_peer_upload(
+            transfer_id=tid,
+            file_path_str=filepath,
+            progress_callback=lambda b, t, s: print_progress(b, t, s, prefix="Resuming Upload")
+        )
+        if res.get("success"):
+            print_success(f"Upload successfully resumed & staged! Offset: {res.get('offset_resumed'):,} bytes. SHA-256 verified.")
+        else:
+            print_error(f"Resume upload failed: {res.get('error')}")
+
+    else:
+        print_info(f"Resuming download of [{tid}]...", tag="TCP")
+        res = client.resume_peer_download(
+            transfer_id=tid,
+            filename=fname,
+            filesize=fsize,
+            expected_checksum=checksum,
+            progress_callback=lambda b, t, s: print_progress(b, t, s, prefix="Resuming Download")
+        )
+        if res.get("success"):
+            print_success(f"Download successfully resumed & verified! Saved to: {res.get('saved_path')}")
+        else:
+            print_error(f"Resume download failed: {res.get('error')}")
+
+
+def handle_cancel_transfer(client: TCPClient) -> None:
+    """Module 3: Allows users to cancel their own pending or active transfers."""
+    print_info("Fetching active transfers...", tag="TCP")
+    transfers = client.list_all_transfers()
+    if not transfers:
+        print_info("No transfers found on server.", tag="TCP")
+        return
+
+    cancellable = [
+        t for t in transfers
+        if t.get("status") not in ["COMPLETED", "CANCELLED"] and (t.get("sender") == client.username or t.get("receiver") == client.username)
+    ]
+
+    if not cancellable:
+        print_info("No active or pending transfers eligible for cancellation.", tag="TCP")
+        return
+
+    print(f"\n{TermColor.BOLD}--- Your Active Transfers ---{TermColor.RESET}")
+    for idx, t in enumerate(cancellable, 1):
+        role = "Sender" if t.get("sender") == client.username else "Receiver"
+        print(f"  [{idx}] {t.get('transfer_id')} | {t.get('filename')} ({t.get('filesize'):,} bytes) | Role: {role} | Status: {t.get('status')}")
+
+    sel = input(f"\nSelect transfer to cancel [1-{len(cancellable)}] or enter Transfer ID: ").strip()
+    target_tid = None
+    if sel.isdigit() and 1 <= int(sel) <= len(cancellable):
+        target_tid = cancellable[int(sel) - 1].get("transfer_id")
+    elif sel:
+        target_tid = sel
+
+    if not target_tid:
+        print_error("Invalid selection.")
+        return
+
+    res = client.cancel_transfer(target_tid)
+    if res.get("success"):
+        print_success(f"Transfer [{target_tid}] cancelled successfully.")
+    else:
+        print_error(f"Cancellation failed: {res.get('error')}")
+
+
 def main() -> None:
     print_banner()
 
@@ -277,9 +404,12 @@ def main() -> None:
 [4] List Online Connected Users
 [5] Send File to User (Peer-to-Peer Transfer)
 [6] Check Incoming Transfer Requests (Receive/Verify)
-[9] Disconnect & Exit
+[7] View File Transfers Registry (Status, Size, Stored Bytes)
+[8] Resume Interrupted File Transfer (Upload / Download)
+[9] Cancel Active or Pending Transfer
+[0] Disconnect & Exit
 """)
-            choice = input("Select an option [1-9]: ").strip()
+            choice = input("Select an option [0-9]: ").strip()
 
             if choice == "1":
                 print(f"""
@@ -314,13 +444,22 @@ def main() -> None:
             elif choice == "6":
                 handle_check_incoming_transfers(client)
 
+            elif choice == "7":
+                handle_list_transfers(client)
+
+            elif choice == "8":
+                handle_resume_transfer(client)
+
             elif choice == "9":
+                handle_cancel_transfer(client)
+
+            elif choice in ["0", "exit", "quit"]:
                 print_info("Disconnecting from TCP server...", tag="TCP")
                 client.disconnect()
                 print_success("Disconnected cleanly. Goodbye!")
                 break
             else:
-                print_warning("Invalid choice. Please select 1, 2, 3, 4, 5, 6, or 9.")
+                print_warning("Invalid choice. Please select 0-9.")
 
         except (KeyboardInterrupt, EOFError):
             print("\nDisconnecting...")
