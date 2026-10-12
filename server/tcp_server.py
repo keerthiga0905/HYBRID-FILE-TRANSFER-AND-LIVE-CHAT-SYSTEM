@@ -1,11 +1,14 @@
-"""
-TCP Server Module - Handles reliable connection-oriented communication.
-Multithreaded client handler supporting TCP File Upload, Download, List, RESUME, and framed JSON protocol.
-"""
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import socket
 import threading
-from pathlib import Path
+import uuid
+import time
+from typing import Dict, Any, List
 from shared.config import DEFAULT_HOST, TCP_PORT, CHUNK_SIZE
 from shared.protocol import receive_message, send_message
 from shared.checksum import calculate_sha256
@@ -21,7 +24,9 @@ from server.file_manager import (
 
 class TCPServer:
     """
-    Multithreaded TCP Server for reliable connection-oriented file transfers & resumes.
+    Multithreaded TCP Server for reliable connection-oriented communication.
+    Assigns unique session IDs, manages username registry, detects duplicate users,
+    and supports streaming file operations.
     """
 
     def __init__(self, host: str = DEFAULT_HOST, port: int = TCP_PORT):
@@ -29,8 +34,15 @@ class TCPServer:
         self.port = port
         self.server_socket: socket.socket | None = None
         self.is_running = False
-        self.active_clients = {}
+        self.active_clients: Dict[str, socket.socket] = {}
+        self.clients_registry: Dict[str, Dict[str, Any]] = {}
+        self.active_usernames: set[str] = set()
         self._lock = threading.Lock()
+
+    def get_connected_users(self) -> List[Dict[str, Any]]:
+        """Returns list of all currently registered and active TCP clients."""
+        with self._lock:
+            return list(self.clients_registry.values())
 
     def start(self) -> None:
         """Initializes TCP socket, binds, listens, and runs accept loop."""
@@ -57,16 +69,17 @@ class TCPServer:
         while self.is_running:
             try:
                 client_sock, client_addr = self.server_socket.accept()
+                session_id = uuid.uuid4().hex[:8]
                 addr_str = f"{client_addr[0]}:{client_addr[1]}"
                 with self._lock:
                     self.active_clients[addr_str] = client_sock
 
-                print_info(f"Client connected: {addr_str}", tag="TCP")
-                log_event(f"TCP Client connected: {addr_str}")
+                print_info(f"Client connected: {addr_str} (Initial Session: {session_id})", tag="TCP")
+                log_event(f"TCP Client connected: {addr_str} [session={session_id}]")
 
                 client_thread = threading.Thread(
                     target=self._handle_client,
-                    args=(client_sock, client_addr),
+                    args=(client_sock, client_addr, session_id),
                     daemon=True,
                     name=f"TCPClientHandler-{client_addr[1]}"
                 )
@@ -76,12 +89,14 @@ class TCPServer:
                 if not self.is_running:
                     break
 
-    def _handle_client(self, client_sock: socket.socket, client_addr: tuple[str, int]) -> None:
+    def _handle_client(self, client_sock: socket.socket, client_addr: tuple[str, int], session_id: str) -> None:
         """
         Handles communication lifecycle for a single TCP client.
         Executed inside a separate thread per client socket.
         """
         addr_str = f"{client_addr[0]}:{client_addr[1]}"
+        registered_username: str | None = None
+
         try:
             while self.is_running:
                 try:
@@ -101,20 +116,63 @@ class TCPServer:
 
                 cmd = msg.get("command", "").upper()
 
-                if cmd == "HELLO":
-                    client_name = msg.get("client_name", "UnknownClient")
-                    print_info("HELLO received", tag="TCP")
-                    log_event(f"HELLO received from {client_name} ({addr_str})")
+                if cmd in ["HELLO", "REGISTER"]:
+                    raw_name = msg.get("client_name", msg.get("username", "")).strip()
+
+                    # Validate username format (2 to 30 characters, alphanumeric + underscore/hyphen)
+                    clean_check = raw_name.replace("_", "").replace("-", "")
+                    if not raw_name or len(raw_name) < 2 or len(raw_name) > 30 or not clean_check.isalnum():
+                        err_resp = {
+                            "status": "ERROR",
+                            "code": "INVALID_USERNAME",
+                            "message": f"Invalid username '{raw_name}'. Must be 2-30 characters (letters, numbers, '-' or '_')."
+                        }
+                        send_message(client_sock, err_resp)
+                        print_warning(f"Rejected invalid username '{raw_name}' from {addr_str}")
+                        continue
+
+                    # Check for duplicate active username
+                    with self._lock:
+                        if raw_name in self.active_usernames and raw_name != registered_username:
+                            err_resp = {
+                                "status": "ERROR",
+                                "code": "DUPLICATE_USERNAME",
+                                "message": f"Username '{raw_name}' is already taken by another connected user."
+                            }
+                            send_message(client_sock, err_resp)
+                            print_warning(f"Rejected duplicate username '{raw_name}' from {addr_str}")
+                            continue
+
+                        # Update registry
+                        if registered_username:
+                            self.active_usernames.discard(registered_username)
+
+                        registered_username = raw_name
+                        self.active_usernames.add(registered_username)
+                        self.clients_registry[session_id] = {
+                            "session_id": session_id,
+                            "username": registered_username,
+                            "ip": client_addr[0],
+                            "port": client_addr[1],
+                            "addr": addr_str,
+                            "status": "CONNECTED",
+                            "connected_at": time.time()
+                        }
+
+                    print_success(f"User '{registered_username}' registered with Session ID [{session_id}] from {addr_str}")
+                    log_event(f"User '{registered_username}' registered [session={session_id}] from {addr_str}")
 
                     response = {
                         "status": "SUCCESS",
                         "command": "HELLO_ACK",
-                        "message": "Connection is working",
+                        "message": f"Welcome '{registered_username}'! Registration successful.",
+                        "session_id": session_id,
+                        "username": registered_username,
                         "client_id": addr_str,
                         "server_status": "RUNNING"
                     }
                     send_message(client_sock, response)
-                    print_info("HELLO response sent", tag="TCP")
+                    print_info(f"HELLO response sent to '{registered_username}' [{session_id}]", tag="TCP")
 
                 elif cmd == "LIST":
                     files_list = list_upload_files()
@@ -216,8 +274,16 @@ class TCPServer:
                 pass
             with self._lock:
                 self.active_clients.pop(addr_str, None)
-            print_info(f"Client disconnected: {addr_str}", tag="TCP")
-            log_event(f"TCP Client disconnected: {addr_str}")
+                if registered_username:
+                    self.active_usernames.discard(registered_username)
+                self.clients_registry.pop(session_id, None)
+
+            if registered_username:
+                print_info(f"Client disconnected: {addr_str} (User: '{registered_username}', Session: {session_id})", tag="TCP")
+                log_event(f"TCP Client disconnected: {addr_str} (User: '{registered_username}', Session: {session_id})")
+            else:
+                print_info(f"Client disconnected: {addr_str} (Session: {session_id})", tag="TCP")
+                log_event(f"TCP Client disconnected: {addr_str} (Session: {session_id})")
 
     def stop(self) -> None:
         """Stops the TCP server and closes server socket."""
@@ -229,3 +295,17 @@ class TCPServer:
                 pass
         print_info("TCP File Server stopped", tag="TCP")
         log_event("TCP Server stopped")
+
+
+if __name__ == "__main__":
+    print_info("Starting Standalone TCP Server (Module 1)...", tag="TCP")
+    srv = TCPServer(host=DEFAULT_HOST, port=TCP_PORT)
+    try:
+        srv.start()
+        print_info(f"TCP Server running on {DEFAULT_HOST}:{TCP_PORT}. Press Ctrl+C to terminate.", tag="TCP")
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nStopping TCP Server...")
+        srv.stop()
+

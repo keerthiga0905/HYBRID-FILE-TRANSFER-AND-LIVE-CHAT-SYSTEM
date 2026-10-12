@@ -1,17 +1,17 @@
-"""
-TCP Client Module - Handles TCP connection lifecycle, framed message processing,
-streaming file uploads/downloads, and interrupted transfer RESUME recovery with SHA-256 verification.
-"""
+import sys
+from pathlib import Path
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import os
 import socket
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 from shared.config import DEFAULT_HOST, TCP_PORT, CHUNK_SIZE
 from shared.protocol import send_message, receive_message
 from shared.checksum import calculate_sha256, verify_checksum
-from shared.utils import print_success, print_error, print_info
+from shared.utils import print_success, print_error, print_info, print_warning
 from client.file_manager import get_safe_download_path, sanitize_filename, DOWNLOADS_DIR
 
 
@@ -25,6 +25,8 @@ class TCPClient:
         self.port = port
         self.sock: socket.socket | None = None
         self.is_connected = False
+        self.session_id: str | None = None
+        self.username: str = ""
 
     def connect(self) -> bool:
         """Creates AF_INET SOCK_STREAM socket and connects to server."""
@@ -43,7 +45,7 @@ class TCPClient:
             return False
 
     def send_hello(self, client_name: str = "Client") -> Optional[Dict[str, Any]]:
-        """Sends HELLO command JSON message to server."""
+        """Sends HELLO command JSON message to register username and receive unique session ID."""
         if not self.is_connected or not self.sock:
             return None
 
@@ -52,7 +54,11 @@ class TCPClient:
             send_message(self.sock, hello_request)
             resp = receive_message(self.sock)
             if resp and resp.get("status") == "SUCCESS":
-                print_success(f"HELLO received: {resp.get('message')}")
+                self.session_id = resp.get("session_id")
+                self.username = resp.get("username", client_name)
+                print_success(f"Registered as '{self.username}' | Session ID: [{self.session_id}]")
+            elif resp and resp.get("status") == "ERROR":
+                print_warning(f"Registration rejected: {resp.get('message')}")
             return resp
         except (socket.error, ValueError) as e:
             print_error(f"TCP communication error: {e}")

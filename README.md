@@ -12,6 +12,146 @@
 
 ---
 
+## 🚀 Module 1: TCP Socket Programming & Multi-Client Session Engine
+
+### 1. Module 1 Objectives & Deliverables
+* **Real TCP Sockets:** Pure standard-library Python sockets utilizing `socket.AF_INET` and `socket.SOCK_STREAM`.
+* **Port 5000 Listener:** Multithreaded TCP server accepting simultaneous incoming client connections.
+* **Unique Client Session IDs:** Unique 8-hex session tokens (`uuid.uuid4().hex[:8]`) assigned upon connection.
+* **Username Registration & Validation:** Interactive client prompt requiring unique alphanumeric usernames (2–30 chars).
+* **Duplicate Username Detection:** Real-time rejection (`DUPLICATE_USERNAME`) if another connected client is holding the username.
+* **Server-Side Registry:** Thread-safe state tracking (`session_id`, `username`, `ip`, `port`, `status="CONNECTED"`, `connected_at`).
+* **Connection Lifecycle Telemetry:** Real-time server logging for connection, registration, and disconnection/reset events.
+* **Framed Stream Protocol:** 4-byte Big-Endian length-prefixed JSON protocol preventing TCP stream fragmentation / sticking.
+
+---
+
+### 2. Modular Project Structure
+
+```text
+CN-project/
+├── server/                      # Server-side networking implementation
+│   ├── tcp_server.py           # Core Module 1 TCP Server & Multithreaded Handler
+│   ├── server.py               # Combined Server Entry Point (TCP 5000 + UDP 6000)
+│   ├── client_registry.py      # Client state & session tracking
+│   ├── file_manager.py         # Storage & upload streaming handlers
+│   └── logger.py               # Structured event logging
+│
+├── client/                      # Client-side networking implementation
+│   ├── tcp_client.py           # Core Module 1 TCP Client socket wrapper & framing
+│   ├── client.py               # Interactive CLI Client (Terminal connection & menu)
+│   ├── client_controller.py    # Bridge between Client UI and networking sockets
+│   └── file_manager.py         # Client downloads directory & SHA-256 validation
+│
+├── shared/                      # Shared protocols, config, and utilities
+│   ├── protocol.py             # 4-Byte Length-Prefixed Framing (send_message / receive_message)
+│   ├── config.py               # Network constants (DEFAULT_HOST="127.0.0.1", TCP_PORT=5000)
+│   ├── checksum.py             # SHA-256 calculation & constant-time verification
+│   ├── stats.py                # Real-time network throughput & packet metrics
+│   └── utils.py                # ANSI terminal colors & formatted logging
+│
+├── tests/                       # Automated unit test suite
+│   ├── test_tcp.py             # Module 1 TCP Tests (Concurrency, Sessions, Registry, Errors)
+│   └── ...                     # Additional protocol tests
+│
+└── README.md                    # System documentation & setup guide
+```
+
+---
+
+### 3. Explanation of Important Files for Module 1
+
+| File | Path | Key Role & Implementation Details |
+| :--- | :--- | :--- |
+| **`server/tcp_server.py`** | [tcp_server.py](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/server/tcp_server.py) | **Multithreaded TCP Server Engine.** Binds to `127.0.0.1:5000`, spawns `_accept_loop`, generates unique `session_id`, and starts a daemon thread (`_handle_client`) per client. Enforces username formatting, prevents duplicate usernames, maintains `clients_registry`, and guarantees cleanup in `finally`. |
+| **`client/tcp_client.py`** | [tcp_client.py](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/client/tcp_client.py) | **Real TCP Socket Client.** Creates `socket.socket(AF_INET, SOCK_STREAM)`, connects to `(host, port)`, sends framed `HELLO` payload with username, receives assigned `session_id`, and manages socket teardown. |
+| **`client/client.py`** | [client.py](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/client/client.py) | **Interactive Terminal Client.** Prompts user for Server IP (`127.0.0.1`), Port (`5000`), and Username. Loops on duplicate username rejection until valid, prints connection card, and offers interactive session options. |
+| **`shared/protocol.py`** | [protocol.py](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/shared/protocol.py) | **TCP Stream Framing.** Implements `send_message()` and `receive_message()`. Uses `struct.pack(">I", length)` to prepend a 4-byte Big-Endian length header before JSON payload bytes. Uses `recv_exact()` to guarantee entire message receipt without boundary errors. |
+| **`shared/config.py`** | [config.py](file:///c:/Users/KEERTHIGA%20M/Desktop/CN-project/shared/config.py) | Centralized network parameters (`DEFAULT_HOST = "127.0.0.1"`, `TCP_PORT = 5000`, `CHUNK_SIZE = 4096`). |
+
+---
+
+### 4. Step-by-Step Windows PowerShell Commands to Run Module 1
+
+Open separate **Windows PowerShell** windows from the project root directory (`c:\Users\KEERTHIGA M\Desktop\CN-project`):
+
+#### Terminal 1: Run TCP Server
+```powershell
+python server/tcp_server.py
+```
+*Expected Server Output:*
+```text
+[OK 10:30:00] TCP File Server listening on 127.0.0.1:5000
+[TCP 10:30:00] TCP Server running on 127.0.0.1:5000. Press Ctrl+C to terminate.
+```
+
+#### Terminal 2: Run Client 1 (Alice)
+```powershell
+python client/client.py
+```
+*Enter inputs:*
+- **Server IP:** Press `Enter` (defaults to `127.0.0.1`)
+- **TCP Port:** Press `Enter` (defaults to `5000`)
+- **Username:** `Alice`
+
+*Expected Terminal 2 Output:*
+```text
+[OK 10:30:15] TCP CONNECTION ESTABLISHED
+[INFO 10:30:15] Registering username 'Alice' with server...
+[OK 10:30:15] Registered as 'Alice' | Session ID: [4a0bbfc0]
+=============================================================
+  [SUCCESS] REGISTERED WITH TCP SERVER
+  Session ID: 4a0bbfc0
+  Username:   Alice
+  Server:     127.0.0.1:5000
+=============================================================
+```
+
+#### Terminal 3: Run Client 2 (Bob - Concurrent Connection)
+```powershell
+python client/client.py
+```
+*Enter inputs:*
+- **Server IP:** Press `Enter` (defaults to `127.0.0.1`)
+- **TCP Port:** Press `Enter` (defaults to `5000`)
+- **Username:** `Bob`
+
+*Expected Terminal 3 Output:*
+```text
+[OK 10:30:30] TCP CONNECTION ESTABLISHED
+[INFO 10:30:30] Registering username 'Bob' with server...
+[OK 10:30:30] Registered as 'Bob' | Session ID: [7e50cf3e]
+=============================================================
+  [SUCCESS] REGISTERED WITH TCP SERVER
+  Session ID: 7e50cf3e
+  Username:   Bob
+  Server:     127.0.0.1:5000
+=============================================================
+```
+
+#### Terminal 4: Test Duplicate Username Rejection (Alice duplicate check)
+```powershell
+python client/client.py
+```
+*Enter inputs:*
+- **Username:** `Alice`
+- *Observation:* Server rejects with `[ERROR] Registration Failed: Username 'Alice' is already taken by another connected user.`
+- Prompt asks for a different unique username. Enter `Charlie` to successfully connect!
+
+---
+
+### 5. Running Automated Unit Tests for Module 1
+
+Run the dedicated Module 1 TCP unit tests:
+```powershell
+python -m unittest tests/test_tcp.py
+```
+*All 8 tests pass in < 1 second, validating listening sockets, concurrent multi-client threads, unique session IDs, username validation, duplicate rejection, and graceful disconnect registry updates.*
+
+---
+
+---
+
 ## 🏗️ System Architecture
 
 ```text
