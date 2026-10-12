@@ -257,14 +257,15 @@ class ClientController:
         self._add_log("WARN", f"Rejected peer file transfer [{transfer_id}]: {reason}")
         return res
 
-    def send_chat_message(self, message: str) -> Dict[str, Any]:
-        """Sends UDP MSG datagram to server."""
+    def send_chat_message(self, message: str, recipient: Optional[str] = None) -> Dict[str, Any]:
+        """Sends UDP MSG datagram to server with application reliability."""
         if not self.udp_connected or not self.udp_client:
             return {"success": False, "error": "Not connected to UDP server"}
 
-        res = self.udp_client.send_chat_message(message)
+        res = self.udp_client.send_chat_message(message, recipient=recipient)
         if res.get("success"):
-            self._add_log("UDP", f"Sent UDP Chat Message [seq={res.get('sequence')}]: '{message}'")
+            prefix = f"to {recipient}" if recipient and recipient not in ["ALL", "GROUP", ""] else "Group"
+            self._add_log("UDP", f"Sent UDP Chat Message ({prefix}) [msg_id={res.get('msg_id')}, seq={res.get('sequence')}]: '{message}'")
         return res
 
     def get_chat_history(self) -> List[Dict[str, Any]]:

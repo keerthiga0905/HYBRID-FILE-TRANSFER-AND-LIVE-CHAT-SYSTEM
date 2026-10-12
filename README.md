@@ -616,6 +616,122 @@ python -m unittest tests/test_chat.py -v
 
 ---
 
+## 🛡️ Module 6: Optional Application-Layer Reliability over UDP
+
+### 1. Module 6 Objectives & Protocol Specification
+Module 6 implements application-layer reliability directly on top of pure connectionless UDP datagram sockets (`socket.AF_INET`, `socket.SOCK_DGRAM`) on Port **6000**, while preserving the working TCP file transfer system (Port **5000**) and UDP presence tracking.
+
+> [!IMPORTANT]
+> **Semantic Meaning of an ACK (Defined Receipt Event):**
+> An application-layer ACK confirms that the remote network endpoint socket received and parsed the datagram into memory. **It does NOT prove that a human user has read or seen the message.** It is an endpoint transport confirmation, not a read receipt.
+
+#### Key Features & Requirements
+1. **Unique Message IDs & Sequence Numbers:** Every chat message is assigned a globally unique message ID (`msg_id`, e.g. `msg_b484442dc7f9` generated via UUID) and a strictly incrementing sequence number (`seq`, e.g. `101`, `102`).
+2. **Standardized Application Protocol Frame:**
+   ```json
+   {
+       "type": "MSG",
+       "msg_id": "msg_b484442dc7f9",
+       "sequence": 101,
+       "sender": "Alice",
+       "recipient": "Bob",
+       "mode": "PRIVATE",
+       "message": "Reliable message over UDP",
+       "session_id": "3f9a1b2c",
+       "require_ack": true,
+       "timestamp": "12:05:30"
+   }
+   ```
+3. **Delivery Confirmation ACKs:** Receivers send an explicit JSON ACK echoing the message ID and sequence:
+   ```json
+   {
+       "type": "ACK",
+       "msg_id": "msg_b484442dc7f9",
+       "sequence": 101,
+       "status": "SUCCESS",
+       "recipient": "Alice",
+       "timestamp": "12:05:31"
+   }
+   ```
+4. **Non-Blocking Asynchronous Retransmission:** Senders launch background daemon monitor threads (`UDPRetryThread-<seq>`) that sleep for `ack_timeout` (default 1.0s). Chat activity and UI interactions remain completely non-blocking.
+5. **Configurable Retry Limits & Timeouts:** Defaults to 1.0s timeout and 3 retries (`MAX_RETRIES = 3`), dynamically adjustable via `set_retry_policy(ack_timeout, max_retries)`.
+6. **Application Duplicate Detection & Suppression:** Tracks `processed_msg_ids` and `processed_sequences` sets to guarantee messages are never displayed or stored more than once.
+7. **Duplicate ACK Re-Transmission (The Classic Network Problem Solved):**
+   If an ACK packet is lost on the reverse path, the sender will retransmit. When the receiver sees the duplicate message, it **does not re-display or re-forward** the message, but **immediately re-sends the ACK** to the sender so the sender terminates its retry loop instead of falsely reporting delivery failure!
+8. **Delivery State Telemetry:** Distinguishes between `Sent` (pending ACK), `Retrying (1/3)`, `Retrying (2/3)`, `Retrying (3/3)`, `Delivered` (ACK confirmed), and `Delivery Failed` (after max retries exhausted).
+
+---
+
+### 2. Deep Dive: OS-Level TCP Reliability vs Application-Layer UDP Reliability
+
+| Network Layer / Feature | TCP (OS / Kernel Level) | Module 6 UDP (Application Layer) |
+| :--- | :--- | :--- |
+| **Operating Layer** | Transport Layer (L4) in OS Kernel | Application Layer (L7) in User Space |
+| **Connection Setup** | 3-Way Handshake (`SYN`, `SYN-ACK`, `ACK`) | Connectionless (`SOCK_DGRAM`), no kernel handshake |
+| **Sequence Numbering** | 32-bit byte-level sequence numbers (`seq=byte_offset`) | Message-level integer sequence + unique UUID `msg_id` |
+| **Acknowledgments** | Cumulative / Selective ACKs in TCP segment header | Explicit JSON application payload datagram |
+| **Retransmission Timer** | Dynamic RTO calculated via Karn/Jacobson RTT algorithm | Configurable stop-and-wait timer (`ack_timeout = 1.0s`) |
+| **Retry Cap** | OS kernel timeout (`tcp_retries2`, usually minutes) | Fixed retry ceiling (`max_retries = 3`, configurable) |
+| **Duplicate Handling** | Kernel TCP stack drops duplicate bytes automatically | Application filters via `processed_msg_ids` & re-sends ACK |
+| **Flow & Congestion Control**| Sliding window (`rcv_wnd`), Slow Start, AIMD, Cubic/BBR | Explicit application payload limits (1024 bytes per datagram) |
+| **Message Boundaries** | None (continuous byte stream; requires application framing) | Preserved natively by UDP datagram boundaries |
+| **Control & Tuning** | Hardcoded or constrained by OS kernel socket options | Fully customizable in Python code, testable via mock sockets |
+
+---
+
+### 3. Retransmission, Duplicate Detection & ACK Resend Flow
+
+```text
+SENDER (Alice)                                    RECEIVER / SERVER (Bob)
+   │                                                         │
+   │ 1. MSG [msg_id=msg_01, seq=101, text="Hello"]          │
+   ├────────────────────────────────────────────────────────>│ [Stored in processed_msg_ids]
+   │                                                         │ [Displayed to user]
+   │                         ✕ (ACK Lost in Network)         │
+   │                      <─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┤ 2. ACK [msg_id=msg_01, seq=101]
+   │                                                         │
+   │ [Timeout 1.0s expires: Retransmit 1/3]                  │
+   │ 3. MSG [msg_id=msg_01, seq=101] (Retransmission)        │
+   ├────────────────────────────────────────────────────────>│ [DUPLICATE DETECTED!]
+   │                                                         │ [Do NOT display again]
+   │                                                         │ 4. RE-SEND ACK [msg_id=msg_01, seq=101]
+   │<────────────────────────────────────────────────────────┤ (Allows Alice to stop retrying!)
+   │                                                         │
+   │ [ACK Received!]                                         │
+   │ Status: Delivered                                       │
+```
+
+---
+
+### 4. Step-by-Step PowerShell Guide: Testing Module 6 Reliability
+
+#### Step 1: Run the Dedicated Module 6 Reliability Test Suite
+```powershell
+python -m unittest tests/test_udp_reliability.py -v
+```
+**Expected Output:**
+```text
+test_01_msg_id_and_sequence_assignment_and_ack ... ok
+test_02_retransmission_on_dropped_ack_and_recovery ... ok
+test_03_duplicate_message_rejection_and_ack_resend ... ok
+test_04_delivery_failure_reported_after_retry_limit ... ok
+test_05_non_blocking_chat_activity ... ok
+test_06_configurable_retries_and_timeouts ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 4.145s
+
+OK
+```
+
+#### Step 2: Run Full Project Test Suite (All 6 Modules)
+```powershell
+python -m unittest discover tests -v
+```
+*54 tests across TCP, File Transfer, Resume, UDP Presence, Live Chat, and Application Reliability pass with 0 failures!*
+
+---
+
 ## 🏗️ System Architecture
 
 ```text

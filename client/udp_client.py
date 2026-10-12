@@ -8,6 +8,7 @@ import json
 import socket
 import threading
 import time
+import uuid
 from typing import Dict, Any, List, Optional
 from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD, ACK_TIMEOUT, MAX_RETRIES
 from shared.utils import print_success, print_error, print_info, print_warning, get_timestamp
@@ -17,13 +18,25 @@ class UDPClient:
     """
     UDP Client implementing application-layer reliability over connectionless datagram sockets,
     authenticated session tracking, live chat, heartbeat presence, and presence notifications.
+    Includes unique message IDs, sequence tracking, timeout retransmission (3 retries max),
+    and duplicate message filtering.
     """
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT, username: str = "Keerthi", session_id: Optional[str] = None):
+    def __init__(
+        self,
+        host: str = DEFAULT_HOST,
+        port: int = UDP_PORT,
+        username: str = "Keerthi",
+        session_id: Optional[str] = None,
+        ack_timeout: float = ACK_TIMEOUT,
+        max_retries: int = MAX_RETRIES,
+    ):
         self.host = host
         self.port = port
         self.username = username
         self.session_id = session_id
+        self.ack_timeout = max(0.05, float(ack_timeout))
+        self.max_retries = max(0, int(max_retries))
         self.sock: socket.socket | None = None
         self.is_connected = False
 
@@ -33,13 +46,23 @@ class UDPClient:
 
         self.messages_history: List[Dict[str, Any]] = []
         self.presence_events: List[Dict[str, Any]] = []
-        self.pending_acks: Dict[int, Dict[str, Any]] = {}
+        self.pending_acks: Dict[Any, Dict[str, Any]] = {}
         self.processed_sequences: set = set()
+        self.processed_msg_ids: set = set()
         self.pending_responses: Dict[str, Dict[str, Any]] = {}
 
         self.seq_counter = 100
         self.simulated_loss_rate = 0.0
         self._lock = threading.Lock()
+
+    def set_retry_policy(self, ack_timeout: float = ACK_TIMEOUT, max_retries: int = MAX_RETRIES) -> None:
+        """
+        Configures application-layer reliability policy (timeout duration and retry attempts).
+        """
+        with self._lock:
+            self.ack_timeout = max(0.05, float(ack_timeout))
+            self.max_retries = max(0, int(max_retries))
+            print_info(f"UDP Retry Policy configured: ACK timeout={self.ack_timeout}s, Max retries={self.max_retries}", tag="UDP")
 
     def set_simulated_loss_rate(self, rate: float) -> None:
         """Sets the client-side simulated packet loss rate."""
@@ -101,18 +124,28 @@ class UDPClient:
 
                         elif msg_type == "ACK":
                             seq = int(payload.get("sequence", 0))
+                            msg_id = payload.get("msg_id")
                             try:
                                 from shared.stats import global_stats
                                 global_stats.record_udp_ack()
                             except Exception:
                                 pass
 
+                            matched_key = None
                             if seq in self.pending_acks:
-                                self.pending_acks[seq]["status"] = "DELIVERED"
-                                print_success(f"UDP ACK [{seq}] Received!")
+                                matched_key = seq
+                            elif msg_id:
+                                for k, v in self.pending_acks.items():
+                                    if v.get("msg_id") == msg_id:
+                                        matched_key = k
+                                        break
+
+                            if matched_key is not None:
+                                self.pending_acks[matched_key]["status"] = "DELIVERED"
+                                print_success(f"UDP ACK [msg_id={msg_id}, seq={seq}] Received!")
                                 # Update history entry status
                                 for m in self.messages_history:
-                                    if m.get("sequence") == seq:
+                                    if (seq and m.get("sequence") == seq) or (msg_id and m.get("msg_id") == msg_id):
                                         m["status"] = "Delivered"
 
                         elif msg_type == "ERROR":
@@ -122,29 +155,51 @@ class UDPClient:
 
                         elif msg_type in ["BROADCAST", "MSG"]:
                             seq = int(payload.get("sequence", 0))
+                            msg_id = str(payload.get("msg_id", f"msg_{seq}"))
                             sender = payload.get("sender", "Unknown")
                             recipient = payload.get("recipient", "ALL")
                             mode = str(payload.get("mode", "GROUP" if msg_type == "BROADCAST" else "PRIVATE")).upper()
+                            require_ack = payload.get("require_ack", False)
 
                             # Check if message already exists in history (e.g. locally added on send)
                             already_present = False
                             for m in self.messages_history:
-                                if m.get("sequence") == seq and m.get("sender") == sender:
+                                if (m.get("msg_id") == msg_id and msg_id) or (m.get("sequence") == seq and m.get("sender") == sender):
                                     m["status"] = "Delivered"
                                     already_present = True
                                     break
 
                             if already_present:
                                 self.processed_sequences.add(seq)
+                                self.processed_msg_ids.add(msg_id)
                                 continue
 
-                            # Duplicate sequence detection safeguard
-                            if seq in self.processed_sequences:
-                                print_warning(f"Duplicate UDP message [seq={seq}] detected - Ignored display.")
+                            # Duplicate sequence / msg_id detection (Requirements 6, 7, 8)
+                            is_duplicate = (msg_id in self.processed_msg_ids) or (seq in self.processed_sequences and seq > 0)
+                            if is_duplicate:
+                                print_warning(f"Duplicate UDP message [msg_id={msg_id}, seq={seq}] detected - Ignored display.")
+                                # Requirement 8: If a duplicate arrives, send the ACK again so original sender can stop retrying
+                                if require_ack or msg_type == "MSG":
+                                    ack_reply = {
+                                        "type": "ACK",
+                                        "msg_id": msg_id,
+                                        "sequence": seq,
+                                        "status": "SUCCESS",
+                                        "duplicate": True,
+                                        "sender": self.username,
+                                        "recipient": sender,
+                                        "timestamp": get_timestamp()
+                                    }
+                                    try:
+                                        self.sock.sendto(json.dumps(ack_reply).encode("utf-8"), (self.host, self.port))
+                                    except Exception:
+                                        pass
                                 continue
 
                             self.processed_sequences.add(seq)
+                            self.processed_msg_ids.add(msg_id)
                             record = {
+                                "msg_id": msg_id,
                                 "sequence": seq,
                                 "mode": mode,
                                 "sender": sender,
@@ -158,6 +213,22 @@ class UDPClient:
                                 print_info(f"UDP Private MSG from [{sender}]: {record['message']}", tag="UDP")
                             else:
                                 print_info(f"UDP Group Chat [{sender}]: {record['message']}", tag="UDP")
+
+                            # Send ACK if required (Requirement 3)
+                            if require_ack:
+                                ack_reply = {
+                                    "type": "ACK",
+                                    "msg_id": msg_id,
+                                    "sequence": seq,
+                                    "status": "SUCCESS",
+                                    "sender": self.username,
+                                    "recipient": sender,
+                                    "timestamp": get_timestamp()
+                                }
+                                try:
+                                    self.sock.sendto(json.dumps(ack_reply).encode("utf-8"), (self.host, self.port))
+                                except Exception:
+                                    pass
 
                 except Exception:
                     pass
@@ -213,10 +284,18 @@ class UDPClient:
             print_warning(f"UDP JOIN request error: {e}")
             return None
 
-    def send_chat_message(self, message_text: str, recipient: Optional[str] = None) -> Dict[str, Any]:
+    def send_chat_message(
+        self,
+        message_text: str,
+        recipient: Optional[str] = None,
+        require_ack: bool = True,
+        msg_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Sends a MSG UDP datagram to the server with Application-Layer Reliability
-        (ACK tracking & retransmission handling). Supports Group and Private messaging.
+        (Unique message ID, sequence tracking, ACK monitoring & timeout retransmission).
+        Supports Group and Private messaging.
+        Note: An ACK confirms socket/endpoint receipt, NOT that a human has read the message.
         """
         if not self.is_connected or not self.sock:
             return {"success": False, "error": "UDP Client is not connected"}
@@ -234,19 +313,24 @@ class UDPClient:
         with self._lock:
             self.seq_counter += 1
             seq = self.seq_counter
+            if not msg_id:
+                msg_id = f"msg_{uuid.uuid4().hex[:12]}"
 
         msg_payload = {
             "type": "MSG",
+            "msg_id": msg_id,
             "mode": mode,
             "sequence": seq,
             "sender": self.username,
             "recipient": target_recip,
             "message": text,
             "session_id": self.session_id,
+            "require_ack": require_ack,
             "timestamp": get_timestamp()
         }
 
         local_record = {
+            "msg_id": msg_id,
             "sequence": seq,
             "mode": mode,
             "sender": self.username,
@@ -258,12 +342,15 @@ class UDPClient:
 
         with self._lock:
             self.processed_sequences.add(seq)
+            self.processed_msg_ids.add(msg_id)
             self.messages_history.append(local_record)
-            self.pending_acks[seq] = {
-                "payload": msg_payload,
-                "retries": 0,
-                "status": "PENDING"
-            }
+            if require_ack:
+                self.pending_acks[seq] = {
+                    "msg_id": msg_id,
+                    "payload": msg_payload,
+                    "retries": 0,
+                    "status": "PENDING"
+                }
 
         # Send initial datagram
         try:
@@ -275,36 +362,45 @@ class UDPClient:
             except Exception:
                 pass
             prefix = f"Private to [{target_recip}]" if mode == "PRIVATE" else "Group"
-            print_info(f"Sent UDP Chat MSG ({prefix}) [seq={seq}]: '{text}'", tag="UDP")
+            print_info(f"Sent UDP Chat MSG ({prefix}) [msg_id={msg_id}, seq={seq}]: '{text}'", tag="UDP")
         except Exception as e:
             print_error(f"Error sending UDP message: {e}")
-            return {"success": False, "error": str(e)}
+            return {"success": False, "error": str(e), "msg_id": msg_id, "sequence": seq}
 
-        # Launch retransmission timer thread for this message
-        retry_thread = threading.Thread(
-            target=self._retransmit_monitor,
-            args=(seq,),
-            daemon=True,
-            name=f"UDPRetryThread-{seq}"
-        )
-        retry_thread.start()
+        # Launch retransmission timer thread if delivery confirmation required
+        if require_ack:
+            retry_thread = threading.Thread(
+                target=self._retransmit_monitor,
+                args=(seq, msg_id),
+                daemon=True,
+                name=f"UDPRetryThread-{seq}"
+            )
+            retry_thread.start()
 
-        return {"success": True, "sequence": seq, "message": text}
+        return {
+            "success": True,
+            "msg_id": msg_id,
+            "sequence": seq,
+            "message": text,
+            "status": "Sent"
+        }
 
-    def _retransmit_monitor(self, seq: int) -> None:
+    def _retransmit_monitor(self, seq: int, msg_id: str) -> None:
         """
-        Monitors ACK status for `seq`. Retransmits after ACK_TIMEOUT (1s) up to MAX_RETRIES (3 times).
+        Monitors ACK status for message [seq, msg_id].
+        Retransmits after `ack_timeout` (default 1.0s) up to `max_retries` (default 3 times).
+        Thread-safe and non-blocking: runs concurrently without blocking other chat actions.
         """
         retries = 0
-        while retries < MAX_RETRIES:
-            time.sleep(ACK_TIMEOUT)
+        while retries < self.max_retries:
+            time.sleep(self.ack_timeout)
 
             with self._lock:
                 if seq not in self.pending_acks:
                     break
 
                 ack_info = self.pending_acks[seq]
-                if ack_info["status"] == "DELIVERED":
+                if ack_info["status"] in ["DELIVERED", "ACKNOWLEDGED"]:
                     break
 
                 # ACK timed out - Retransmit packet
@@ -320,10 +416,10 @@ class UDPClient:
 
                 # Update status in chat history
                 for m in self.messages_history:
-                    if m.get("sequence") == seq:
-                        m["status"] = f"Retrying ({retries}/{MAX_RETRIES})"
+                    if m.get("sequence") == seq or m.get("msg_id") == msg_id:
+                        m["status"] = f"Retrying ({retries}/{self.max_retries})"
 
-                print_warning(f"UDP ACK Timeout for [seq={seq}]. Retransmitting attempt {retries}/{MAX_RETRIES}...")
+                print_warning(f"UDP ACK Timeout for [msg_id={msg_id}, seq={seq}]. Retransmitting attempt {retries}/{self.max_retries}...")
 
                 try:
                     if self.sock and self.is_connected:
@@ -339,7 +435,7 @@ class UDPClient:
 
         # Check final status after retries
         with self._lock:
-            if seq in self.pending_acks and self.pending_acks[seq]["status"] != "DELIVERED":
+            if seq in self.pending_acks and self.pending_acks[seq]["status"] not in ["DELIVERED", "ACKNOWLEDGED"]:
                 self.pending_acks[seq]["status"] = "FAILED"
                 try:
                     from shared.stats import global_stats
@@ -347,9 +443,9 @@ class UDPClient:
                 except Exception:
                     pass
                 for m in self.messages_history:
-                    if m.get("sequence") == seq:
+                    if m.get("sequence") == seq or m.get("msg_id") == msg_id:
                         m["status"] = "Delivery Failed"
-                print_error(f"UDP Delivery Failed for message [seq={seq}] after {MAX_RETRIES} retries.")
+                print_error(f"UDP Delivery Failed for message [msg_id={msg_id}, seq={seq}] after {self.max_retries} retries.")
 
     def start_heartbeat(self, interval: float = 5.0) -> None:
         """Launches background thread sending HEARTBEAT datagrams."""

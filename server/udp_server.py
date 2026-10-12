@@ -30,6 +30,8 @@ class UDPServer:
         self._lock = threading.Lock()
         self.message_counter = 100
         self.simulated_loss_rate = DEFAULT_SIMULATED_LOSS_RATE
+        self.processed_msg_ids: set[str] = set()
+        self.processed_messages: set[tuple[str, int]] = set()
 
     def set_simulated_loss_rate(self, rate: float) -> None:
         """Sets the simulated packet loss rate (0.0 = 0% to 0.5 = 50%)."""
@@ -162,8 +164,32 @@ class UDPServer:
             self._send_response(response, addr)
 
         elif msg_type == "MSG":
-            seq = payload.get("sequence", 0)
+            seq = int(payload.get("sequence", 0))
+            msg_id = str(payload.get("msg_id", f"msg_{seq}"))
             text = str(payload.get("message", "")).strip()
+            mode = str(payload.get("mode", "GROUP")).upper()
+            recipient = str(payload.get("recipient", "ALL")).strip()
+            require_ack = payload.get("require_ack", True)
+
+            # Module 6: Duplicate detection and ACK re-send (Req 6 & Req 8)
+            with self._lock:
+                is_duplicate = (msg_id in self.processed_msg_ids) or ((username, seq) in self.processed_messages and seq > 0)
+
+            if is_duplicate:
+                print_warning(f"UDP Duplicate MSG detected from '{username}' [msg_id={msg_id}, seq={seq}]. Re-sending ACK.")
+                # If a duplicate arrives, send the ACK again so original sender stops retrying
+                ack_msg = {
+                    "type": "ACK",
+                    "msg_id": msg_id,
+                    "sequence": seq,
+                    "status": "SUCCESS",
+                    "mode": mode,
+                    "recipient": recipient,
+                    "duplicate": True,
+                    "timestamp": get_timestamp()
+                }
+                self._send_response(ack_msg, addr)
+                return
 
             # 1. Sender validation against registered session and endpoint (anti-spoofing)
             sender_data = self.registry.clients.get(username)
@@ -210,10 +236,16 @@ class UDPServer:
 
             self.registry.update_heartbeat(username, addr[0], addr[1], session_id=session_id)
 
-            # 3. Route Private vs Group Message
-            mode = str(payload.get("mode", "GROUP")).upper()
-            recipient = str(payload.get("recipient", "ALL")).strip()
+            # Record processed message to prevent duplicate processing
+            with self._lock:
+                self.processed_msg_ids.add(msg_id)
+                if seq > 0:
+                    self.processed_messages.add((username, seq))
+                if len(self.processed_msg_ids) > 2000:
+                    self.processed_msg_ids.clear()
+                    self.processed_messages.clear()
 
+            # 3. Route Private vs Group Message
             if mode == "PRIVATE" or (recipient and recipient.upper() not in ["ALL", "GROUP", ""]):
                 # Private Chat Routing
                 if recipient == username:
@@ -244,13 +276,15 @@ class UDPServer:
                     self._send_response(err_resp, addr)
                     return
 
-                # Send ACK to sender
+                # Send ACK to sender with msg_id & sequence (Req 2 & Req 3)
                 ack_msg = {
                     "type": "ACK",
+                    "msg_id": msg_id,
                     "sequence": seq,
                     "status": "SUCCESS",
                     "mode": "PRIVATE",
-                    "recipient": recipient
+                    "recipient": recipient,
+                    "timestamp": get_timestamp()
                 }
                 self._send_response(ack_msg, addr)
 
@@ -258,17 +292,19 @@ class UDPServer:
                 private_packet = {
                     "type": "MSG",
                     "mode": "PRIVATE",
+                    "msg_id": msg_id,
                     "sequence": seq,
                     "sender": username,
                     "recipient": recipient,
                     "message": text,
+                    "require_ack": require_ack,
                     "timestamp": get_timestamp()
                 }
                 try:
                     raw_bytes = json.dumps(private_packet).encode("utf-8")
                     self.udp_socket.sendto(raw_bytes, (target_data["ip"], target_data["port"]))
-                    print_info(f"UDP Private MSG routed: '{username}' -> '{recipient}' [seq={seq}]", tag="UDP")
-                    log_event(f"UDP Private MSG: '{username}' -> '{recipient}' [seq={seq}]: {text}")
+                    print_info(f"UDP Private MSG routed: '{username}' -> '{recipient}' [msg_id={msg_id}, seq={seq}]", tag="UDP")
+                    log_event(f"UDP Private MSG: '{username}' -> '{recipient}' [msg_id={msg_id}, seq={seq}]: {text}")
                 except Exception as e:
                     log_event(f"Error routing private UDP message to {recipient}: {e}", "error")
 
@@ -276,10 +312,12 @@ class UDPServer:
                 # Group Chat Broadcast
                 ack_msg = {
                     "type": "ACK",
+                    "msg_id": msg_id,
                     "sequence": seq,
                     "status": "SUCCESS",
                     "mode": "GROUP",
-                    "recipient": "ALL"
+                    "recipient": "ALL",
+                    "timestamp": get_timestamp()
                 }
                 self._send_response(ack_msg, addr)
 
@@ -287,15 +325,28 @@ class UDPServer:
                 broadcast_packet = {
                     "type": "BROADCAST",
                     "mode": "GROUP",
+                    "msg_id": msg_id,
                     "sequence": seq,
                     "sender": username,
                     "recipient": "ALL",
                     "message": text,
+                    "require_ack": require_ack,
                     "timestamp": get_timestamp()
                 }
                 self._broadcast_to_online_users(broadcast_packet, sender_addr=addr)
-                print_info(f"UDP Group MSG from '{username}' [seq={seq}]: '{text}'", tag="UDP")
-                log_event(f"UDP Group MSG from '{username}' [seq={seq}]: {text}")
+                print_info(f"UDP Group MSG from '{username}' [msg_id={msg_id}, seq={seq}]: '{text}'", tag="UDP")
+                log_event(f"UDP Group MSG from '{username}' [msg_id={msg_id}, seq={seq}]: {text}")
+
+        elif msg_type == "ACK":
+            # Module 6: Forward client-to-client ACK if targeted to specific peer
+            target_recip = payload.get("recipient")
+            if target_recip and target_recip.upper() not in ["ALL", "GROUP", ""]:
+                target_data = self.registry.clients.get(target_recip)
+                if target_data and target_data.get("status") == "ONLINE" and target_data.get("ip") and target_data.get("port"):
+                    try:
+                        self.udp_socket.sendto(json.dumps(payload).encode("utf-8"), (target_data["ip"], target_data["port"]))
+                    except Exception as e:
+                        log_event(f"Error forwarding ACK to {target_recip}: {e}", "warning")
 
         elif msg_type == "GET_USERS":
             response = {

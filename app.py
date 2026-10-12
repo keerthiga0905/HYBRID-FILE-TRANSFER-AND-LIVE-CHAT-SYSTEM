@@ -108,10 +108,11 @@ def send_chat():
     """Triggers UDP chat message datagram sending to server."""
     data = request.json or {}
     msg_text = data.get("message", "")
+    recipient = data.get("recipient")
     if not msg_text:
         return jsonify({"success": False, "error": "Message parameter required"})
 
-    res = controller.send_chat_message(msg_text)
+    res = controller.send_chat_message(msg_text, recipient=recipient)
     return jsonify(res)
 
 
