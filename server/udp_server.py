@@ -8,11 +8,11 @@ import random
 import socket
 import threading
 import time
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from shared.config import DEFAULT_HOST, UDP_PORT, MAX_UDP_PAYLOAD, DEFAULT_SIMULATED_LOSS_RATE
 from shared.utils import print_info, print_success, print_error, print_warning, get_timestamp
 from server.logger import log_event
-from server.client_registry import registry
+from server.client_registry import registry as default_registry
 
 
 class UDPServer:
@@ -21,9 +21,10 @@ class UDPServer:
     Supports simulated packet loss mode for reliability demonstration.
     """
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT):
+    def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT, registry: Optional[Any] = None):
         self.host = host
         self.port = port
+        self.registry = registry if registry is not None else default_registry
         self.udp_socket: socket.socket | None = None
         self.is_running = False
         self._lock = threading.Lock()
@@ -79,9 +80,12 @@ class UDPServer:
 
                 try:
                     payload = json.loads(data.decode("utf-8"))
-                    self._handle_datagram(payload, addr)
+                    if isinstance(payload, dict):
+                        self._handle_datagram(payload, addr)
+                    else:
+                        print_warning(f"Received non-dict UDP datagram from {addr}")
                 except (json.JSONDecodeError, UnicodeDecodeError) as err:
-                    print_warning(f"Received invalid UDP datagram from {addr}: {err}")
+                    print_warning(f"Received malformed UDP datagram from {addr}: {err}")
 
             except socket.error:
                 if not self.is_running:
@@ -91,28 +95,70 @@ class UDPServer:
         """Processes incoming UDP payload commands."""
         msg_type = payload.get("type", "").upper()
         username = payload.get("username", payload.get("sender", "Unknown")).strip()
+        session_id = payload.get("session_id")
 
         if msg_type == "JOIN":
-            registry.register_client(username, addr[0], addr[1])
-            print_info(f"UDP User JOIN: '{username}' from {addr[0]}:{addr[1]}", tag="UDP")
-            log_event(f"UDP User JOIN: '{username}' ({addr[0]}:{addr[1]})")
+            if not username or len(username) < 2:
+                response = {
+                    "type": "JOIN_ACK",
+                    "status": "ERROR",
+                    "message": "Invalid username. Must be at least 2 characters."
+                }
+                self._send_response(response, addr)
+                return
+
+            client_data = self.registry.register_client(username, addr[0], addr[1], session_id=session_id)
+            if client_data is None:
+                # Session conflict detected - do not overwrite another client's session
+                response = {
+                    "type": "JOIN_ACK",
+                    "status": "ERROR",
+                    "code": "SESSION_CONFLICT",
+                    "message": f"Username '{username}' is already active in another session."
+                }
+                self._send_response(response, addr)
+                return
+
+            print_info(f"UDP User JOIN: '{username}' (Session: {client_data.get('session_id')}) from {addr[0]}:{addr[1]}", tag="UDP")
+            log_event(f"UDP User JOIN: '{username}' (Session: {client_data.get('session_id')}) ({addr[0]}:{addr[1]})")
 
             response = {
                 "type": "JOIN_ACK",
                 "status": "SUCCESS",
+                "session_id": client_data.get("session_id"),
                 "message": f"Welcome '{username}' to UDP Chat Server",
-                "users": registry.get_users_list()
+                "users": self.registry.get_users_list()
             }
             self._send_response(response, addr)
 
-        elif msg_type == "HEARTBEAT":
-            registry.update_heartbeat(username, addr[0], addr[1])
-            response = {
-                "type": "HEARTBEAT_ACK",
-                "status": "SUCCESS",
+            # Broadcast presence notification to other connected clients
+            broadcast_presence = {
+                "type": "PRESENCE_CHANGE",
+                "event": "USER_JOINED",
                 "username": username,
-                "server_time": time.time()
+                "session_id": client_data.get("session_id"),
+                "status": "ONLINE",
+                "users": self.registry.get_users_list(),
+                "timestamp": get_timestamp()
             }
+            self._broadcast_to_online_users(broadcast_presence, sender_addr=addr)
+
+        elif msg_type == "HEARTBEAT":
+            ok = self.registry.update_heartbeat(username, addr[0], addr[1], session_id=session_id)
+            if not ok:
+                response = {
+                    "type": "HEARTBEAT_ACK",
+                    "status": "ERROR",
+                    "code": "SESSION_CONFLICT",
+                    "message": f"Heartbeat rejected: session mismatch for '{username}'"
+                }
+            else:
+                response = {
+                    "type": "HEARTBEAT_ACK",
+                    "status": "SUCCESS",
+                    "username": username,
+                    "server_time": time.time()
+                }
             self._send_response(response, addr)
 
         elif msg_type == "MSG":
@@ -123,7 +169,7 @@ class UDPServer:
             if len(text) > 1024:
                 text = text[:1024]
 
-            registry.update_heartbeat(username, addr[0], addr[1])
+            self.registry.update_heartbeat(username, addr[0], addr[1], session_id=session_id)
             print_info(f"UDP Chat MSG from '{username}' [seq={seq}]: '{text}'", tag="UDP")
             log_event(f"UDP Chat MSG from '{username}' [seq={seq}]: {text}")
 
@@ -148,15 +194,27 @@ class UDPServer:
         elif msg_type == "GET_USERS":
             response = {
                 "type": "USERS_LIST",
-                "users": registry.get_users_list()
+                "users": self.registry.get_users_list(),
+                "online_users": self.registry.get_online_users()
             }
             self._send_response(response, addr)
 
         elif msg_type == "LEAVE":
-            registry.mark_offline(username)
+            self.registry.mark_offline(username)
             print_info(f"UDP User LEAVE: '{username}'", tag="UDP")
             response = {"type": "LEAVE_ACK", "status": "SUCCESS"}
             self._send_response(response, addr)
+
+            # Notify remaining users of presence change
+            broadcast_presence = {
+                "type": "PRESENCE_CHANGE",
+                "event": "USER_LEFT",
+                "username": username,
+                "status": "OFFLINE",
+                "users": self.registry.get_users_list(),
+                "timestamp": get_timestamp()
+            }
+            self._broadcast_to_online_users(broadcast_presence, sender_addr=addr)
 
     def _send_response(self, response_data: Dict[str, Any], addr: tuple[str, int]) -> None:
         """Sends a JSON formatted UDP datagram back to client endpoint."""
@@ -167,26 +225,36 @@ class UDPServer:
             log_event(f"Error sending UDP datagram to {addr}: {e}", "error")
 
     def _broadcast_to_online_users(self, broadcast_data: Dict[str, Any], sender_addr: tuple[str, int] | None = None) -> None:
-        """Broadcasts UDP datagram to all registered online clients (excluding sender)."""
+        """Broadcasts UDP datagram to all registered online clients with active endpoints."""
         raw_bytes = json.dumps(broadcast_data).encode("utf-8")
-        with registry._lock:
-            for user, data in registry.clients.items():
-                if data["status"] == "ONLINE":
-                    # Avoid echoing message back to the sender endpoint
-                    if sender_addr and (data["ip"], data["port"]) == sender_addr:
+        with self.registry._lock:
+            for user, data in self.registry.clients.items():
+                if data.get("status") == "ONLINE" and data.get("ip") and data.get("port"):
+                    target_endpoint = (data["ip"], data["port"])
+                    # Avoid echoing message back to sender endpoint if requested
+                    if sender_addr and target_endpoint == sender_addr:
                         continue
                     try:
-                        self.udp_socket.sendto(raw_bytes, (data["ip"], data["port"]))
+                        self.udp_socket.sendto(raw_bytes, target_endpoint)
                     except Exception as e:
-                        log_event(f"Broadcast error to {user}: {e}", "warning")
+                        log_event(f"Broadcast error to {user} at {target_endpoint}: {e}", "warning")
 
     def _presence_monitor_loop(self) -> None:
-        """Periodically checks for client heartbeat timeouts every 3 seconds."""
+        """Periodically checks for client heartbeat timeouts every 1.5 seconds."""
         while self.is_running:
-            time.sleep(3.0)
-            timed_out_users = registry.check_timeouts()
+            time.sleep(1.5)
+            timed_out_users = self.registry.check_timeouts()
             for user in timed_out_users:
                 print_warning(f"UDP User '{user}' marked OFFLINE (Heartbeat timeout)")
+                broadcast_packet = {
+                    "type": "PRESENCE_CHANGE",
+                    "event": "TIMEOUT",
+                    "username": user,
+                    "status": "OFFLINE",
+                    "users": self.registry.get_users_list(),
+                    "timestamp": get_timestamp()
+                }
+                self._broadcast_to_online_users(broadcast_packet)
 
     def stop(self) -> None:
         """Stops UDP server and closes socket."""

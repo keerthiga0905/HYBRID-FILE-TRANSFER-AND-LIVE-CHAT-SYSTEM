@@ -11,9 +11,10 @@ from pathlib import Path
 # Add project root directory to python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from shared.config import DEFAULT_HOST, TCP_PORT
+from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT
 from shared.utils import TermColor, print_info, print_success, print_error, print_warning
 from client.tcp_client import TCPClient
+from client.udp_client import UDPClient
 
 
 def print_banner() -> None:
@@ -358,6 +359,41 @@ def handle_cancel_transfer(client: TCPClient) -> None:
         print_error(f"Cancellation failed: {res.get('error')}")
 
 
+def handle_udp_presence(udp_client: Optional[UDPClient]) -> None:
+    """Module 4: Displays real-time UDP online user presence and heartbeat monitor."""
+    if not udp_client or not udp_client.is_connected:
+        print_warning("UDP Client is not connected to presence server.")
+        return
+
+    print_info("Querying UDP Presence Server (Port 6000) via datagram...", tag="UDP")
+    users = udp_client.get_online_users()
+    if not users:
+        print_warning("No online users reported by UDP Server.")
+        return
+
+    print(f"\n{TermColor.BOLD}==========================================================================================")
+    print("  REAL-TIME UDP ONLINE USER PRESENCE REGISTRY (Port 6000)")
+    print(f"=========================================================================================={TermColor.RESET}")
+    print(f"{'Username':<18} | {'Session ID':<12} | {'UDP Endpoint':<24} | {'Status':<10} | {'Last Seen'}")
+    print("-" * 90)
+    for u in users:
+        uname = u.get("username", "")[:16]
+        sess = str(u.get("session_id", "N/A"))[:10]
+        endpoint = str(u.get("endpoint", "N/A"))[:22]
+        st = u.get("status", "OFFLINE")
+        color = TermColor.GREEN if st == "ONLINE" else TermColor.RED
+        last_seen = u.get("last_seen", "")
+        print(f"{uname:<18} | {sess:<12} | {endpoint:<24} | {color}{st:<10}{TermColor.RESET} | {last_seen}")
+    
+    events = udp_client.get_presence_events()
+    if events:
+        print(f"\n{TermColor.CYAN}Recent Presence Change Notifications ({len(events)}):{TermColor.RESET}")
+        for evt in events[-5:]:
+            print(f"  • [{evt.get('timestamp')}] {evt.get('username')} -> {evt.get('status')} ({evt.get('event')})")
+
+    print(f"\nActive Heartbeat: {'RUNNING (Every 5s)' if udp_client.is_heartbeat_running else 'STOPPED'}")
+
+
 def main() -> None:
     print_banner()
 
@@ -371,6 +407,7 @@ def main() -> None:
 
     # Register username and obtain unique session ID
     current_username = username
+    session_id = "N/A"
     while True:
         print_info(f"Registering username '{current_username}' with server...", tag="TCP")
         resp = client.send_hello(client_name=current_username)
@@ -393,6 +430,15 @@ def main() -> None:
             print_error(f"Registration Failed: {err_msg}")
             current_username = input("\nPlease re-enter a valid username: ").strip()
 
+    # Step 2: Initialize UDP Client with same authenticated session for Live Presence
+    udp_client = UDPClient(host=host, port=UDP_PORT, username=current_username, session_id=session_id)
+    if udp_client.connect():
+        resp_udp = udp_client.join_chat()
+        if resp_udp and resp_udp.get("status") == "SUCCESS":
+            print_success(f"Registered with UDP Presence & Heartbeat Engine on port {UDP_PORT}!")
+        else:
+            print_warning("UDP Presence registration did not complete (Server may not be running UDP).")
+
     # Interactive Client Command Loop
     while True:
         try:
@@ -401,22 +447,24 @@ def main() -> None:
 [1] View Current Session Info
 [2] Ping Server (Re-send HELLO)
 [3] List Server Repository Files
-[4] List Online Connected Users
+[4] List Online Connected Users (TCP & UDP)
 [5] Send File to User (Peer-to-Peer Transfer)
 [6] Check Incoming Transfer Requests (Receive/Verify)
 [7] View File Transfers Registry (Status, Size, Stored Bytes)
 [8] Resume Interrupted File Transfer (Upload / Download)
 [9] Cancel Active or Pending Transfer
+[10] View Real-Time UDP Online Presence & Heartbeat Monitor
 [0] Disconnect & Exit
 """)
-            choice = input("Select an option [0-9]: ").strip()
+            choice = input("Select an option [0-10]: ").strip()
 
             if choice == "1":
                 print(f"""
   Connected Server: {client.host}:{client.port}
   Username:         {client.username}
   Session ID:       {client.session_id}
-  Socket State:     {'CONNECTED' if client.is_connected else 'DISCONNECTED'}
+  TCP Socket State: {'CONNECTED' if client.is_connected else 'DISCONNECTED'}
+  UDP Presence:     {'ONLINE (5s Heartbeat)' if udp_client and udp_client.is_heartbeat_running else 'OFFLINE'}
 """)
             elif choice == "2":
                 print_info("Sending HELLO ping to server...", tag="TCP")
@@ -434,7 +482,7 @@ def main() -> None:
 
             elif choice == "4":
                 users = client.list_online_users()
-                print_info(f"Online Users ({len(users)} found):", tag="TCP")
+                print_info(f"Online TCP Users ({len(users)} found):", tag="TCP")
                 for u in users:
                     print(f"  • Username: {u.get('username'):15} | Session: {u.get('session_id')} | Status: {u.get('status')}")
 
@@ -453,16 +501,23 @@ def main() -> None:
             elif choice == "9":
                 handle_cancel_transfer(client)
 
+            elif choice == "10":
+                handle_udp_presence(udp_client)
+
             elif choice in ["0", "exit", "quit"]:
-                print_info("Disconnecting from TCP server...", tag="TCP")
+                print_info("Disconnecting from TCP & UDP servers...", tag="TCP")
+                if udp_client:
+                    udp_client.leave_chat()
                 client.disconnect()
                 print_success("Disconnected cleanly. Goodbye!")
                 break
             else:
-                print_warning("Invalid choice. Please select 0-9.")
+                print_warning("Invalid choice. Please select 0-10.")
 
         except (KeyboardInterrupt, EOFError):
             print("\nDisconnecting...")
+            if udp_client:
+                udp_client.leave_chat()
             client.disconnect()
             break
 

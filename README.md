@@ -385,6 +385,120 @@ python -m unittest tests/test_resume.py -v
 
 ---
 
+## 📡 Module 4: UDP Communication & Online User Presence Engine
+
+### 1. Module 4 Objectives & Deliverables
+Module 4 adds a high-speed, connectionless UDP datagram subsystem for tracking online users, maintaining presence, and receiving real-time state changes without modifying or replacing the TCP server.
+
+* **Dual-Protocol Coexistence:** 
+  - **TCP Server** continues listening on port **5000** for reliable stream file transfers.
+  - **UDP Server** listens on port **6000** (`socket.AF_INET`, `socket.SOCK_DGRAM`) for datagram presence and messaging.
+* **Session & Identity Reuse:** Clients reuse their authenticated usernames and unique 8-hex session IDs obtained during TCP registration.
+* **UDP Datagram Registration (`JOIN`):** When a client joins, the server records `username`, `session_id`, `ip`, `port`, `endpoint` (`IP:Port`), `last_seen` timestamp, and marks status `ONLINE`.
+* **5-Second Heartbeat Engine (`HEARTBEAT`):** Active clients run a background daemon thread sending lightweight UDP datagrams every 5 seconds.
+* **15-Second Inactivity Timeout:** If no valid heartbeat arrives for 15 seconds, the server marks the client `OFFLINE` and cleans up stale endpoint bindings.
+* **Stale Endpoint Cleanup & Presence Change Notifications (`PRESENCE_CHANGE`):** When clients join, leave, or time out, the server clears stale IP/port allocations and broadcasts `PRESENCE_CHANGE` datagrams (`USER_JOINED`, `USER_LEFT`, `TIMEOUT`) to remaining online clients.
+* **Online Presence Panel (CLI Option `[10]` & Web UI):** Displays a live table of online users, active session tokens, UDP socket endpoints, and last heartbeat timestamps.
+* **Robust Resilience & Fault Tolerance:**
+  - **Repeated `JOIN` Messages:** Handled idempotently by refreshing timestamps and endpoint addresses without creating duplicate registry records.
+  - **Malformed Datagrams:** Binary garbage, non-JSON bytes, and missing fields are rejected without crashing the server.
+  - **Session Isolation:** Rejects unauthorized attempts to overwrite or spoof an active client's session (`SESSION_CONFLICT`).
+
+---
+
+### 2. UDP Presence Protocol Flow
+
+```text
+CLIENT (Alice)                    UDP SERVER (Port 6000)             CLIENT (Bob)
+     │                                    │                                 │
+     │ 1. JOIN (username, session_id)     │                                 │
+     ├───────────────────────────────────>│ [Records Alice: 127.0.0.1:52001]│
+     │<── JOIN_ACK (status: SUCCESS) ─────┤                                 │
+     │                                    │ 2. PRESENCE_CHANGE (Alice joined│
+     │                                    ├────────────────────────────────>│
+     │                                    │                                 │
+     │ 3. HEARTBEAT (Every 5 seconds)     │                                 │
+     ├───────────────────────────────────>│ [Updates last_seen timestamp]   │
+     │<── HEARTBEAT_ACK ──────────────────┤                                 │
+     │                                    │                                 │
+     │ 4. GET_USERS                       │                                 │
+     ├───────────────────────────────────>│                                 │
+     │<── USERS_LIST (Online peers) ──────┤                                 │
+     │                                    │                                 │
+     │ 5. Client Abrupt Exit (No packets) │                                 │
+     │    ... 15.0 seconds elapse ...     │                                 │
+     │                                    │ [Timeout detected!]             │
+     │                                    │ [Alice marked OFFLINE]          │
+     │                                    │ [Stale endpoint cleared]        │
+     │                                    │ 6. PRESENCE_CHANGE (TIMEOUT)    │
+     │                                    ├────────────────────────────────>│
+```
+
+---
+
+### 3. Step-by-Step PowerShell Guide: Testing 3 Clients & Heartbeat Timeout
+
+Open **four** separate Windows PowerShell windows from `c:\Users\KEERTHIGA M\Desktop\CN-project`:
+
+#### Terminal 1: Start Dual TCP & UDP Server
+```powershell
+python server/server.py
+```
+*Output confirms:*
+```text
+TCP File Server listening on 127.0.0.1:5000
+UDP Chat & Presence Server listening on 127.0.0.1:6000
+```
+
+#### Terminal 2: Start Client 1 (Alice)
+```powershell
+python client/client.py
+```
+- Username: `Alice`
+- Observe registration on TCP port 5000 and UDP port 6000.
+
+#### Terminal 3: Start Client 2 (Bob)
+```powershell
+python client/client.py
+```
+- Username: `Bob`
+- Terminal 2 (Alice) immediately receives: `[UDP Presence Notification: User 'Bob' is ONLINE [USER_JOINED]]`.
+
+#### Terminal 4: Start Client 3 (Charlie)
+```powershell
+python client/client.py
+```
+- Username: `Charlie`
+- Terminals 2 and 3 receive notification: `[UDP Presence Notification: User 'Charlie' is ONLINE [USER_JOINED]]`.
+
+#### Verify 3 Clients in Presence Panel:
+In **Terminal 2 (Alice)**, choose option `[10] View Real-Time UDP Online Presence & Heartbeat Monitor`.
+- Observe all 3 users (`Alice`, `Bob`, `Charlie`) listed with status `ONLINE`, their respective UDP endpoints, and active heartbeat timestamps!
+
+#### Test Inactivity Timeout:
+1. In **Terminal 4 (Charlie)**, press `Ctrl+C` or close the window abruptly (simulating network disconnection / crash without sending `LEAVE`).
+2. Wait 15 seconds.
+3. Observe in **Terminal 1 (Server)**:
+   ```text
+   [WARN] UDP User 'Charlie' marked OFFLINE (Heartbeat timeout)
+   ```
+4. Observe in **Terminals 2 and 3 (Alice & Bob)**:
+   ```text
+   [UDP Presence Notification: User 'Charlie' is OFFLINE [TIMEOUT]]
+   ```
+5. In **Terminal 2 (Alice)**, choose option `[10]` again.
+   - `Charlie` is now marked `OFFLINE` and stale endpoints are cleared (`N/A`)!
+
+---
+
+### 4. Running Automated Tests for Module 4
+```powershell
+python -m unittest tests/test_udp.py -v
+```
+*All 8 tests pass, verifying 3-client joins, heartbeat updates, 15-second offline timeouts, presence notifications, repeated joins, malformed datagrams resilience, session isolation, and TCP/UDP dual operation.*
+
+---
+
 ## 🏗️ System Architecture
 
 ```text
@@ -542,7 +656,7 @@ Connection is now established.
 
 ---
 
-## 🧪 Automated Unit Test Suite (40 Passed)
+## 🧪 Automated Unit Test Suite (45 Passed)
 
 To run the complete automated test suite:
 ```bash

@@ -15,13 +15,15 @@ from shared.utils import print_success, print_error, print_info, print_warning, 
 
 class UDPClient:
     """
-    UDP Client implementing application-layer reliability over connectionless datagram sockets.
+    UDP Client implementing application-layer reliability over connectionless datagram sockets,
+    authenticated session tracking, live chat, heartbeat presence, and presence notifications.
     """
 
-    def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT, username: str = "Keerthi"):
+    def __init__(self, host: str = DEFAULT_HOST, port: int = UDP_PORT, username: str = "Keerthi", session_id: Optional[str] = None):
         self.host = host
         self.port = port
         self.username = username
+        self.session_id = session_id
         self.sock: socket.socket | None = None
         self.is_connected = False
 
@@ -30,6 +32,7 @@ class UDPClient:
         self.receiver_thread: threading.Thread | None = None
 
         self.messages_history: List[Dict[str, Any]] = []
+        self.presence_events: List[Dict[str, Any]] = []
         self.pending_acks: Dict[int, Dict[str, Any]] = {}
         self.processed_sequences: set = set()
         self.pending_responses: Dict[str, Dict[str, Any]] = {}
@@ -87,6 +90,15 @@ class UDPClient:
                         if msg_type in ["JOIN_ACK", "USERS_LIST", "LEAVE_ACK"]:
                             self.pending_responses[msg_type] = payload
 
+                        elif msg_type == "PRESENCE_CHANGE":
+                            self.presence_events.append(payload)
+                            if len(self.presence_events) > 50:
+                                self.presence_events.pop(0)
+                            evt = payload.get("event", "UPDATE")
+                            u = payload.get("username", "Unknown")
+                            st = payload.get("status", "")
+                            print_info(f"UDP Presence Notification: User '{u}' is {st} [{evt}]", tag="UDP")
+
                         elif msg_type == "ACK":
                             seq = int(payload.get("sequence", 0))
                             try:
@@ -142,10 +154,12 @@ class UDPClient:
                 if not self.is_connected:
                     break
 
-    def join_chat(self, username: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def join_chat(self, username: Optional[str] = None, session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Sends JOIN UDP datagram to server to register presence."""
         if username:
             self.username = username
+        if session_id:
+            self.session_id = session_id
 
         if not self.is_connected or not self.sock:
             if not self.connect():
@@ -153,7 +167,8 @@ class UDPClient:
 
         join_payload = {
             "type": "JOIN",
-            "username": self.username
+            "username": self.username,
+            "session_id": self.session_id
         }
 
         try:
@@ -169,8 +184,13 @@ class UDPClient:
                     if "JOIN_ACK" in self.pending_responses:
                         response = self.pending_responses.pop("JOIN_ACK")
                         if response.get("status") == "SUCCESS":
+                            if response.get("session_id"):
+                                self.session_id = response.get("session_id")
                             print_success(f"UDP User '{self.username}' joined chat server successfully!")
                             self.start_heartbeat()
+                            return response
+                        elif response.get("status") == "ERROR":
+                            print_warning(f"UDP JOIN rejected: {response.get('message')}")
                             return response
                 time.sleep(0.05)
 
@@ -311,9 +331,10 @@ class UDPClient:
                 print_error(f"UDP Delivery Failed for message [seq={seq}] after {MAX_RETRIES} retries.")
 
     def start_heartbeat(self, interval: float = 5.0) -> None:
-        """Launches background thread sending HEARTBEAT datagrams every 5 seconds."""
+        """Launches background thread sending HEARTBEAT datagrams."""
         if self.is_heartbeat_running:
-            return
+            self.stop_heartbeat()
+            time.sleep(0.05)
 
         self.is_heartbeat_running = True
         self.heartbeat_thread = threading.Thread(
@@ -330,7 +351,8 @@ class UDPClient:
             try:
                 hb_payload = {
                     "type": "HEARTBEAT",
-                    "username": self.username
+                    "username": self.username,
+                    "session_id": self.session_id
                 }
                 raw_bytes = json.dumps(hb_payload).encode("utf-8")
                 self.sock.sendto(raw_bytes, (self.host, self.port))
@@ -348,7 +370,7 @@ class UDPClient:
             with self._lock:
                 self.pending_responses.pop("USERS_LIST", None)
 
-            req = {"type": "GET_USERS", "username": self.username}
+            req = {"type": "GET_USERS", "username": self.username, "session_id": self.session_id}
             self.sock.sendto(json.dumps(req).encode("utf-8"), (self.host, self.port))
 
             start_time = time.time()
@@ -366,21 +388,36 @@ class UDPClient:
         with self._lock:
             return list(self.messages_history)
 
+    def get_presence_events(self) -> List[Dict[str, Any]]:
+        """Returns list of received UDP presence change notifications."""
+        with self._lock:
+            return list(self.presence_events)
+
     def stop_heartbeat(self) -> None:
         """Stops background heartbeat loop."""
         self.is_heartbeat_running = False
 
     def leave_chat(self) -> None:
-        """Sends LEAVE UDP datagram and stops heartbeat."""
+        """Sends LEAVE UDP datagram, stops heartbeat, and safely closes UDP socket."""
         self.stop_heartbeat()
-        if self.sock and self.is_connected:
+        sock_to_close = self.sock
+        if sock_to_close and self.is_connected:
             try:
-                leave_req = {"type": "LEAVE", "username": self.username}
-                self.sock.sendto(json.dumps(leave_req).encode("utf-8"), (self.host, self.port))
+                leave_req = {
+                    "type": "LEAVE",
+                    "username": self.username,
+                    "session_id": self.session_id
+                }
+                sock_to_close.sendto(json.dumps(leave_req).encode("utf-8"), (self.host, self.port))
             except Exception:
                 pass
         self.is_connected = False
         self.sock = None
+        if sock_to_close:
+            try:
+                sock_to_close.close()
+            except Exception:
+                pass
         print_info("Left UDP Chat & Presence", tag="UDP")
 
     disconnect = leave_chat
