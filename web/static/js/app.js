@@ -89,11 +89,22 @@ function showToast(type, title, message) {
 // ========================================================
 function switchTab(tabId) {
     if (tabId === 'dashboard') tabId = 'home';
+    if (tabId === 'chat') tabId = 'group-chat';
     currentTab = tabId;
 
     document.querySelectorAll('.nav-item').forEach(btn => btn.classList.remove('active'));
-    const activeBtn = document.getElementById(`nav-${tabId}`);
-    if (activeBtn) activeBtn.classList.add('active');
+
+    // Highlight the active dashboard link
+    if (tabId === 'group-chat' || tabId === 'private-chat') {
+        const cNav = document.getElementById('nav-chat');
+        if (cNav) cNav.classList.add('active');
+    } else if (tabId === 'files' || tabId === 'requests' || tabId === 'history') {
+        const fNav = document.getElementById('nav-files');
+        if (fNav) fNav.classList.add('active');
+    } else {
+        const activeBtn = document.getElementById(`nav-${tabId}`);
+        if (activeBtn) activeBtn.classList.add('active');
+    }
 
     document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
     const activePage = document.getElementById(`page-${tabId}`);
@@ -101,6 +112,15 @@ function switchTab(tabId) {
         activePage.classList.add('active');
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
+
+    // Sync submode switcher buttons
+    document.querySelectorAll('.submode-btn').forEach(btn => {
+        if (btn.getAttribute('data-target') === tabId) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
 
     if (tabId === 'files') {
         fetchFilesList();
@@ -695,12 +715,22 @@ async function fetchIncomingRequests() {
 
         const badge = document.getElementById('incoming-requests-badge');
         const navBadge = document.getElementById('nav-req-count');
+        const filesReqBadge = document.getElementById('files-req-count');
+        const reqSubBadge = document.getElementById('requests-sub-count');
         const count = pendingRequestsCache.length;
 
         if (badge) badge.textContent = `${count} Pending`;
         if (navBadge) {
             navBadge.textContent = count;
             navBadge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        if (filesReqBadge) {
+            filesReqBadge.textContent = count;
+            filesReqBadge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        if (reqSubBadge) {
+            reqSubBadge.textContent = count;
+            reqSubBadge.style.display = count > 0 ? 'inline-block' : 'none';
         }
 
         renderIncomingRequestsGrid();

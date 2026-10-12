@@ -30,44 +30,34 @@
                     </div>
                 </div>
 
-                <!-- 10 Navigation Panels -->
-                <nav class="nav-links">
-                    <button class="nav-item active" onclick="switchTab('home')" id="nav-home">Home</button>
-                    <button class="nav-item" onclick="switchTab('session')" id="nav-session">Login & Session</button>
-                    <button class="nav-item" onclick="switchTab('users')" id="nav-users">Online Users</button>
-                    <button class="nav-item" onclick="switchTab('files')" id="nav-files">File Transfer</button>
-                    <button class="nav-item" onclick="switchTab('requests')" id="nav-requests">
-                        Incoming Requests <span id="nav-req-count" class="nav-badge-pill" style="display:none;">0</span>
-                    </button>
-                    <button class="nav-item" onclick="switchTab('history')" id="nav-history">Transfer History</button>
-                    <button class="nav-item" onclick="switchTab('group-chat')" id="nav-group-chat">Group Chat</button>
-                    <button class="nav-item" onclick="switchTab('private-chat')" id="nav-private-chat">Private Chat</button>
-                    <button class="nav-item" onclick="switchTab('statistics')" id="nav-statistics">Network Stats</button>
-                    <button class="nav-item" onclick="switchTab('activity')" id="nav-activity">Activity Logs</button>
+                <!-- Dashboard Navigation: ONLY HOME, ONLINE USER, FILE TRANSFER, LIVE CHAT, NETWORK STATS -->
+                <nav class="nav-links" id="main-dashboard-nav">
+                    <button class="nav-item active" onclick="switchTab('home')" id="nav-home">HOME</button>
+                    <button class="nav-item" onclick="switchTab('users')" id="nav-users">ONLINE USER</button>
+                    <button class="nav-item" onclick="switchTab('files')" id="nav-files">FILE TRANSFER</button>
+                    <button class="nav-item" onclick="switchTab('chat')" id="nav-chat">LIVE CHAT</button>
+                    <button class="nav-item" onclick="switchTab('statistics')" id="nav-statistics">NETWORK STATS</button>
                 </nav>
 
-                <!-- Topbar Actions & Status Badges -->
-                <div class="topbar-actions">
-                    <!-- Current User Badge -->
-                    <div class="user-session-badge" id="topbar-user-badge" onclick="switchTab('session')" title="Click to view Login & Session Details">
+                <!-- THEN THE CONNECTION OF BOTH TCP AND UDP -->
+                <div class="topbar-connections-group">
+                    <div class="connections-badge-card" id="topbar-connections-block">
+                        <span class="connections-label">CONNECTION OF BOTH TCP AND UDP</span>
+                        <div class="status-pills">
+                            <div class="status-pill offline" id="pill-tcp" title="TCP File Server (Port 5000)">
+                                <span class="dot">●</span> TCP 5000: <span class="pill-status">Offline</span>
+                            </div>
+                            <div class="status-pill offline" id="pill-udp" title="UDP Chat Server (Port 6000)">
+                                <span class="dot">●</span> UDP 6000: <span class="pill-status">Offline</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Session Trigger -->
+                    <div class="user-session-badge" id="topbar-user-badge" onclick="toggleConnectModal()" title="Current Session • Click to switch user / login">
                         <span class="avatar-dot" id="topbar-avatar">K</span>
                         <span id="topbar-username-display">Keerthi</span>
-                        <span class="session-tag" id="topbar-session-tag">No Session</span>
                     </div>
-
-                    <!-- Dual Protocol Status Indicators -->
-                    <div class="status-pills">
-                        <div class="status-pill offline" id="pill-tcp" title="TCP File Server (Port 5000)">
-                            <span class="dot">●</span> TCP: <span class="pill-status">Offline</span>
-                        </div>
-                        <div class="status-pill offline" id="pill-udp" title="UDP Chat Server (Port 6000)">
-                            <span class="dot">●</span> UDP: <span class="pill-status">Offline</span>
-                        </div>
-                    </div>
-
-                    <button class="btn btn-connect-pill" id="topbar-conn-btn" onclick="toggleConnectModal()">
-                        <span>LET'S CONNECT</span> <span class="btn-arrow">→</span>
-                    </button>
                 </div>
             </div>
         </header>
@@ -81,117 +71,113 @@
             <!-- ============================================== -->
             <!-- 1. HOME DASHBOARD SHOWING SERVER STATUS        -->
             <!-- ============================================== -->
-            <section id="page-home" class="page-view active">
-                <div class="section-container">
+            <!-- ============================================== -->
+            <!-- 1. HOME DASHBOARD: 50/50 SEMI-COLOUR SPLIT     -->
+            <!-- ============================================== -->
+            <section id="page-home" class="page-view active home-page-split-wrapper">
+                <div class="home-split-container">
                     
-                    <!-- Server Status Dual Overview -->
-                    <div class="server-status-dual" style="margin-top: 32px;">
-                        <div class="server-stat-box tcp-box">
-                            <div class="flex-between" style="margin-bottom: 12px;">
-                                <span class="protocol-badge-tcp">TCP File Server • Port 5000</span>
-                                <span class="tag tag-success" id="home-tcp-badge">Checking...</span>
-                            </div>
-                            <h3 style="font-family: var(--font-serif); font-size: 22px; margin-bottom: 8px;">
-                                Connection-Oriented Byte Stream
-                            </h3>
-                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
-                                Handles reliable file transfers, peer-to-peer offers, chunked 4096-byte streaming, and constant-time SHA-256 integrity verification.
+                    <!-- ========================================== -->
+                    <!-- LIGHT HALF (Warm Sand / Linen Side)        -->
+                    <!-- "in home page just show file transfer and  -->
+                    <!--  live chat nothing else"                   -->
+                    <!-- ========================================== -->
+                    <div class="split-half-light">
+                        <div class="light-content-inner">
+                            <div class="editorial-eyebrow">HYBRID NETWORKING SYSTEM • TCP & UDP ARCHITECTURE</div>
+                            
+                            <h1 class="split-hero-title">
+                                HYBRID<br>
+                                <span class="italic-serif text-terracotta">NETWORK</span><br>
+                                PLATFORM
+                            </h1>
+
+                            <p class="split-hero-tagline">
+                                Thoughtful dual protocol architecture uniting connection-oriented byte streaming and real-time datagram communication.
                             </p>
-                            <div style="font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                                <div>Socket: <code>SOCK_STREAM</code></div>
-                                <div>Framing: <code>4-Byte Length Header</code></div>
-                                <div>Chunk Buffer: <code>4096 Bytes</code></div>
-                                <div>Resume: <code>.part Byte Offset</code></div>
-                            </div>
-                            <div style="margin-top: 20px;">
-                                <button class="btn btn-sm btn-primary-pill" onclick="switchTab('files')">Open File Transfer →</button>
-                            </div>
-                        </div>
 
-                        <div class="server-stat-box udp-box">
-                            <div class="flex-between" style="margin-bottom: 12px;">
-                                <span class="protocol-badge-udp">UDP Chat Server • Port 6000</span>
-                                <span class="tag tag-success" id="home-udp-badge">Checking...</span>
-                            </div>
-                            <h3 style="font-family: var(--font-serif); font-size: 22px; margin-bottom: 8px;">
-                                Low-Latency Datagram Engine
-                            </h3>
-                            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
-                                Delivers instant broadcast group messaging, isolated 1-on-1 private chat, 5s heartbeat presence, and 1.0s ACK retransmission reliability.
-                            </p>
-                            <div style="font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                                <div>Socket: <code>SOCK_DGRAM</code></div>
-                                <div>Payload Cap: <code>1024 Bytes</code></div>
-                                <div>Heartbeat: <code>5s Loop (15s Stale)</code></div>
-                                <div>Reliability: <code>1.0s ACK / 3 Retries</code></div>
-                            </div>
-                            <div style="margin-top: 20px; display: flex; gap: 10px;">
-                                <button class="btn btn-sm btn-outline-pill" onclick="switchTab('group-chat')">Group Chat →</button>
-                                <button class="btn btn-sm btn-primary-pill" onclick="switchTab('private-chat')">Private Chat →</button>
+                            <!-- ONLY FILE TRANSFER AND LIVE CHAT -->
+                            <div class="home-two-options">
+                                
+                                <!-- OPTION 1: FILE TRANSFER -->
+                                <div class="home-action-card" onclick="switchTab('files')">
+                                    <div class="card-num-eyebrow">
+                                        <span class="card-num">01</span>
+                                        <span class="card-protocol-tag tcp-tag">TCP • PORT 5000</span>
+                                    </div>
+                                    <h2 class="card-action-title">FILE TRANSFER</h2>
+                                    <p class="card-action-desc">
+                                        Connection-oriented stream transmission. Supports 4096-byte chunk streaming, SHA-256 integrity verification, and resumable partial transfers.
+                                    </p>
+                                    <div class="card-action-cta">
+                                        <span class="cta-text">OPEN FILE TRANSFER</span>
+                                        <span class="cta-arrow">→</span>
+                                    </div>
+                                </div>
+
+                                <!-- OPTION 2: LIVE CHAT -->
+                                <div class="home-action-card" onclick="switchTab('chat')">
+                                    <div class="card-num-eyebrow">
+                                        <span class="card-num">02</span>
+                                        <span class="card-protocol-tag udp-tag">UDP • PORT 6000</span>
+                                    </div>
+                                    <h2 class="card-action-title">LIVE CHAT</h2>
+                                    <p class="card-action-desc">
+                                        Ultra-fast datagram engine with real-time global broadcast, confidential 1-on-1 private messaging, 5s heartbeat presence, and 1.0s ACK reliability.
+                                    </p>
+                                    <div class="card-action-cta">
+                                        <span class="cta-text">OPEN LIVE CHAT</span>
+                                        <span class="cta-arrow">→</span>
+                                    </div>
+                                </div>
+
                             </div>
                         </div>
                     </div>
 
-                    <!-- Quick Metrics Strip -->
-                    <div class="metrics-strip" style="margin-bottom: 40px;">
-                        <div class="metric-item">
-                            <div class="metric-val" id="metric-online-count">0</div>
-                            <div class="metric-lbl">ONLINE PEERS (UDP)</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-val" id="metric-files-count">0</div>
-                            <div class="metric-lbl">FILES IN REPOSITORY (TCP)</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-val" id="metric-transfers-count">0</div>
-                            <div class="metric-lbl">COMPLETED TRANSFERS</div>
-                        </div>
-                        <div class="metric-item">
-                            <div class="metric-val" id="metric-delivery-rate">100%</div>
-                            <div class="metric-lbl">UDP DELIVERY SUCCESS RATE</div>
-                        </div>
-                    </div>
+                    <!-- ========================================== -->
+                    <!-- DARK HALF (Deep Obsidian / Espresso Side)  -->
+                    <!-- Product image embedded inside darker side  -->
+                    <!-- ========================================== -->
+                    <div class="split-half-dark">
+                        <div class="dark-content-inner">
+                            <div class="dark-eyebrow-badge">
+                                <span class="status-indicator-dot"></span>
+                                <span>DUAL SOCKET ENGINE • ACTIVE RUNTIME</span>
+                            </div>
 
-                    <!-- Navigation Cards Grid -->
-                    <div class="section-header-editorial">
-                        <span class="section-eyebrow">MODULE CONTROLS</span>
-                        <h2>Dedicated Protocol <span class="italic-serif text-terracotta">Panels</span></h2>
-                    </div>
+                            <!-- Product Suited Image Inside the Darker Side -->
+                            <div class="monolith-frame-container">
+                                <div class="monolith-image-wrapper">
+                                    <img src="/static/images/hybrid_network_monolith.jpg" alt="Hybrid Network Monolith Architecture" class="monolith-img">
+                                    <div class="monolith-glass-card">
+                                        <div class="monolith-meta-top">
+                                            <span class="meta-tag">HYBRID MONOLITH</span>
+                                            <span class="meta-status">RFC 793 • RFC 768</span>
+                                        </div>
+                                        <h3 class="monolith-headline">Dual Protocol Terminal</h3>
+                                        <div class="monolith-meta-bottom">
+                                            <span>TCP:5000 STREAM</span>
+                                            <span>•</span>
+                                            <span>UDP:6000 DATAGRAM</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
 
-                    <div class="cards-grid" style="margin-bottom: 60px;">
-                        <div class="editorial-card" onclick="switchTab('files')">
-                            <div class="card-img-wrap">
-                                <img src="/static/images/card_file_transfer.jpg" alt="File Transfer" class="card-img">
-                                <div class="card-tag">TCP PORT 5000</div>
-                            </div>
-                            <div class="card-info">
-                                <h3>TCP File Transfer</h3>
-                                <p>Stream large files with SHA-256 verification and resume interrupted partial transfers.</p>
-                                <div class="card-footer-link"><span>Open Transfer Panel</span> →</div>
-                            </div>
-                        </div>
-
-                        <div class="editorial-card" onclick="switchTab('users')">
-                            <div class="card-img-wrap">
-                                <img src="/static/images/card_live_chat.jpg" alt="Online Users" class="card-img">
-                                <div class="card-tag">UDP REGISTRY</div>
-                            </div>
-                            <div class="card-info">
-                                <h3>Online Presence Directory</h3>
-                                <p>Live directory of connected clients with active heartbeat tracking and direct peer actions.</p>
-                                <div class="card-footer-link"><span>View Online Users</span> →</div>
-                            </div>
-                        </div>
-
-                        <div class="editorial-card" onclick="switchTab('statistics')">
-                            <div class="card-img-wrap">
-                                <img src="/static/images/card_network_monitor.jpg" alt="Network Monitor" class="card-img">
-                                <div class="card-tag">DIAGNOSTICS</div>
-                            </div>
-                            <div class="card-info">
-                                <h3>Network Monitor & Loss Simulator</h3>
-                                <p>Real-time bandwidth graphs, RTT latency, and artificial UDP packet loss testing.</p>
-                                <div class="card-footer-link"><span>Open Diagnostics</span> →</div>
+                            <div class="dark-specs-row">
+                                <div class="dark-spec-item">
+                                    <span class="spec-label">TCP STREAM</span>
+                                    <span class="spec-value">Reliable • 4KB Chunks</span>
+                                </div>
+                                <div class="dark-spec-item">
+                                    <span class="spec-label">UDP ENGINE</span>
+                                    <span class="spec-value">Datagram • 1.0s ACK</span>
+                                </div>
+                                <div class="dark-spec-item">
+                                    <span class="spec-label">INTEGRITY</span>
+                                    <span class="spec-value">SHA-256 Checksum</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -354,6 +340,13 @@
                         </div>
                     </div>
 
+                    <!-- Submode Switcher for File Transfer Suite -->
+                    <div class="submode-switcher-bar">
+                        <button class="submode-btn active" data-target="files" onclick="switchTab('files')">📁 FILE REPOSITORY & PEER SEND</button>
+                        <button class="submode-btn" data-target="requests" onclick="switchTab('requests')">📥 INCOMING REQUESTS <span id="files-req-count" class="nav-badge-pill" style="display:none;">0</span></button>
+                        <button class="submode-btn" data-target="history" onclick="switchTab('history')">📜 TRANSFER HISTORY & RESUME</button>
+                    </div>
+
                     <!-- Live Progress Card Widget (Item 6) -->
                     <div class="progress-card" id="transfer-progress-card" style="display: none;">
                         <div class="progress-header">
@@ -437,6 +430,13 @@
                         <button class="btn btn-outline-pill" onclick="fetchIncomingRequests()">🔄 REFRESH REQUESTS</button>
                     </div>
 
+                    <!-- Submode Switcher for File Transfer Suite -->
+                    <div class="submode-switcher-bar">
+                        <button class="submode-btn" data-target="files" onclick="switchTab('files')">📁 FILE REPOSITORY & PEER SEND</button>
+                        <button class="submode-btn active" data-target="requests" onclick="switchTab('requests')">📥 INCOMING REQUESTS <span id="requests-sub-count" class="nav-badge-pill" style="display:none;">0</span></button>
+                        <button class="submode-btn" data-target="history" onclick="switchTab('history')">📜 TRANSFER HISTORY & RESUME</button>
+                    </div>
+
                     <div class="card-panel" style="margin-top: 24px;">
                         <div class="panel-header flex-between">
                             <h3>Pending Transfer Offers</h3>
@@ -464,6 +464,13 @@
                             <p class="subtitle">Detailed log of all completed, resumed, and verified TCP file transfers.</p>
                         </div>
                         <button class="btn btn-outline-pill" onclick="fetchTransfers(); fetchPartials();">🔄 REFRESH</button>
+                    </div>
+
+                    <!-- Submode Switcher for File Transfer Suite -->
+                    <div class="submode-switcher-bar">
+                        <button class="submode-btn" data-target="files" onclick="switchTab('files')">📁 FILE REPOSITORY & PEER SEND</button>
+                        <button class="submode-btn" data-target="requests" onclick="switchTab('requests')">📥 INCOMING REQUESTS</button>
+                        <button class="submode-btn active" data-target="history" onclick="switchTab('history')">📜 TRANSFER HISTORY & RESUME</button>
                     </div>
 
                     <!-- Resumable Partial Files List -->
@@ -508,6 +515,12 @@
                         <div class="status-indicator">
                             <span class="dot online">●</span> <span id="private-status-label">Confidential & Isolated</span>
                         </div>
+                    </div>
+
+                    <!-- Live Chat Submode Switcher -->
+                    <div class="submode-switcher-bar">
+                        <button class="submode-btn" data-target="group-chat" onclick="switchTab('group-chat')">📢 GROUP CHAT (BROADCAST)</button>
+                        <button class="submode-btn active" data-target="private-chat" onclick="switchTab('private-chat')">🔒 PRIVATE CHAT (1-ON-1)</button>
                     </div>
 
                     <div class="chat-split-container" style="margin-top: 24px;">
@@ -556,6 +569,12 @@
                         <div class="status-indicator">
                             <span class="dot online">●</span> <span id="group-status-label">Broadcast Channel</span>
                         </div>
+                    </div>
+
+                    <!-- Live Chat Submode Switcher -->
+                    <div class="submode-switcher-bar">
+                        <button class="submode-btn active" data-target="group-chat" onclick="switchTab('group-chat')">📢 GROUP CHAT (BROADCAST)</button>
+                        <button class="submode-btn" data-target="private-chat" onclick="switchTab('private-chat')">🔒 PRIVATE CHAT (1-ON-1)</button>
                     </div>
 
                     <div class="chat-layout-grid" style="margin-top: 24px;">
