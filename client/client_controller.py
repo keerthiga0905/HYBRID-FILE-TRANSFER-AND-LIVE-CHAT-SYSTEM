@@ -87,11 +87,13 @@ class ClientController:
             self._add_log("ERROR", f"Could not connect to TCP {self.server_host}:{self.tcp_port}")
             return {"success": False, "error": f"Failed to connect to TCP Server at {self.server_host}:{self.tcp_port}"}
 
+        session_id = self.tcp_client.session_id if self.tcp_client else None
+
         # Step 2: Connect & Join UDP Socket
         self._add_log("UDP", f"Initiating UDP socket for {self.server_host}:{self.udp_port}...")
-        self.udp_client = UDPClient(host=self.server_host, port=self.udp_port, username=self.username)
+        self.udp_client = UDPClient(host=self.server_host, port=self.udp_port, username=self.username, session_id=session_id)
         if self.udp_client.connect():
-            udp_resp = self.udp_client.join_chat(self.username)
+            udp_resp = self.udp_client.join_chat(self.username, session_id=session_id)
             if udp_resp:
                 self.udp_connected = True
                 self._add_log("SUCCESS", "UDP Chat & Presence Joined! Started 5s Heartbeat Thread.")
@@ -105,6 +107,7 @@ class ClientController:
             "tcp_port": self.tcp_port,
             "udp_port": self.udp_port,
             "username": self.username,
+            "session_id": session_id,
             "tcp_connected": self.tcp_connected,
             "udp_connected": self.udp_connected
         }
@@ -319,6 +322,12 @@ class ClientController:
 
     def get_status(self) -> Dict[str, Any]:
         """Returns real connection state."""
+        session_id = None
+        if self.tcp_client and self.tcp_client.session_id:
+            session_id = self.tcp_client.session_id
+        elif self.udp_client and self.udp_client.session_id:
+            session_id = self.udp_client.session_id
+
         return {
             "is_connected": self.is_connected,
             "tcp_connected": self.tcp_connected and (self.tcp_client.is_connected if self.tcp_client else False),
@@ -326,7 +335,8 @@ class ClientController:
             "server_host": self.server_host,
             "tcp_port": self.tcp_port,
             "udp_port": self.udp_port,
-            "username": self.username
+            "username": self.username,
+            "session_id": session_id
         }
 
     def get_activity_logs(self) -> List[Dict[str, str]]:
