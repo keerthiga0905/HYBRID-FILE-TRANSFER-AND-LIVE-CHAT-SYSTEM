@@ -19,6 +19,8 @@ app = Flask(
     template_folder=str(BASE_DIR / "web" / "templates"),
     static_folder=str(BASE_DIR / "web" / "static")
 )
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.jinja_env.auto_reload = True
 
 
 @app.route("/")

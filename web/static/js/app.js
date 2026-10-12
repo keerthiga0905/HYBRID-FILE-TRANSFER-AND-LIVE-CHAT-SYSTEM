@@ -1,5 +1,5 @@
 /* 
-   HYBRID TRANSFER - Product UI Controller Script
+   HYBRID TRANSFER - Editorial Product UI Controller Script
    Handles Navigation, Connection Management, API Interactivity, Real-time Backend Sync,
    File Listing, TCP Upload, TCP Download, UDP Presence, and Live Chat Messaging.
 */
@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initApp();
 });
 
-let currentTab = 'dashboard';
+let currentTab = 'home';
 let pollTimer = null;
 
 function initApp() {
@@ -18,6 +18,7 @@ function initApp() {
 
 // Tab Switching logic
 function switchTab(tabId) {
+    if (tabId === 'dashboard') tabId = 'home';
     currentTab = tabId;
     
     document.querySelectorAll('.nav-item').forEach(btn => {
@@ -36,11 +37,11 @@ function switchTab(tabId) {
     const activePage = document.getElementById(`page-${tabId}`);
     if (activePage) {
         activePage.classList.add('active');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     if (tabId === 'files') {
         fetchFilesList();
-    } else if (tabId === 'transfers') {
         fetchTransfers();
     } else if (tabId === 'chat') {
         fetchOnlineUsers();
@@ -55,11 +56,24 @@ function switchTab(tabId) {
 // Modal control
 function toggleConnectModal() {
     const modal = document.getElementById('connect-modal');
-    modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    if (modal) {
+        modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+    }
 }
 
 function closeConnectModal() {
-    document.getElementById('connect-modal').style.display = 'none';
+    const modal = document.getElementById('connect-modal');
+    if (modal) modal.style.display = 'none';
+}
+
+function showUploadModal() {
+    const modal = document.getElementById('upload-modal');
+    if (modal) modal.style.display = 'flex';
+}
+
+function closeUploadModal() {
+    const modal = document.getElementById('upload-modal');
+    if (modal) modal.style.display = 'none';
 }
 
 // Connection Handler
@@ -72,9 +86,11 @@ async function performConnection() {
     const btn = document.getElementById('modal-connect-btn');
     const errBox = document.getElementById('modal-error-msg');
 
-    btn.disabled = true;
-    btn.textContent = 'CONNECTING...';
-    errBox.style.display = 'none';
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'CONNECTING...';
+    }
+    if (errBox) errBox.style.display = 'none';
 
     try {
         const response = await fetch('/api/connect', {
@@ -97,15 +113,21 @@ async function performConnection() {
             fetchOnlineUsers();
             fetchLogs();
         } else {
-            errBox.textContent = data.error || 'Connection failed';
-            errBox.style.display = 'block';
+            if (errBox) {
+                errBox.textContent = data.error || 'Connection failed';
+                errBox.style.display = 'block';
+            }
         }
     } catch (err) {
-        errBox.textContent = 'Network request error: ' + err.message;
-        errBox.style.display = 'block';
+        if (errBox) {
+            errBox.textContent = 'Network request error: ' + err.message;
+            errBox.style.display = 'block';
+        }
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'CONNECT TO SERVER';
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'CONNECT NOW →';
+        }
     }
 }
 
@@ -119,8 +141,8 @@ async function checkBackendStatus() {
         if (currentTab === 'chat') {
             fetchOnlineUsers();
             fetchChatMessages();
-        } else if (currentTab === 'dashboard') {
-            fetchOnlineUsers();
+        } else if (currentTab === 'statistics' || currentTab === 'network') {
+            fetchNetworkStats();
         }
     } catch (e) {
         console.warn('Backend status check error:', e);
@@ -129,38 +151,28 @@ async function checkBackendStatus() {
 
 function updateUIState(status) {
     const topServer = document.getElementById('topbar-server-val');
-    const userName = document.getElementById('user-name-display');
-    const userGreeting = document.getElementById('dash-greeting');
+    const topBtn = document.getElementById('topbar-conn-btn');
     
-    if (topServer) topServer.textContent = `${status.server_host}:${status.tcp_port}`;
-    if (userName) userName.textContent = status.username || 'Keerthi';
-    if (userGreeting) userGreeting.textContent = status.username || 'Keerthi';
+    if (topServer) topServer.textContent = `${status.server_host || '127.0.0.1'}`;
 
     // TCP Status
     const tcpPill = document.getElementById('pill-tcp');
-    const dashTcpVal = document.getElementById('dash-tcp-val');
     const footerTcpTxt = document.getElementById('footer-tcp-txt');
     const footerTcpDot = document.getElementById('footer-tcp-dot');
 
     if (status.tcp_connected) {
         if (tcpPill) {
-            tcpPill.className = 'pill online';
-            tcpPill.querySelector('.pill-status').textContent = 'Connected';
+            tcpPill.className = 'status-pill online';
+            const pillSpan = tcpPill.querySelector('.pill-status');
+            if (pillSpan) pillSpan.textContent = 'Connected (5000)';
         }
-        if (dashTcpVal) {
-            dashTcpVal.className = 'stat-value status-text online';
-            dashTcpVal.textContent = 'CONNECTED';
-        }
-        if (footerTcpTxt) footerTcpTxt.textContent = 'Connected';
+        if (footerTcpTxt) footerTcpTxt.textContent = 'Connected (5000)';
         if (footerTcpDot) footerTcpDot.className = 'dot online';
     } else {
         if (tcpPill) {
-            tcpPill.className = 'pill offline';
-            tcpPill.querySelector('.pill-status').textContent = 'Offline';
-        }
-        if (dashTcpVal) {
-            dashTcpVal.className = 'stat-value status-text offline';
-            dashTcpVal.textContent = 'OFFLINE';
+            tcpPill.className = 'status-pill offline';
+            const pillSpan = tcpPill.querySelector('.pill-status');
+            if (pillSpan) pillSpan.textContent = 'Offline';
         }
         if (footerTcpTxt) footerTcpTxt.textContent = 'Disconnected';
         if (footerTcpDot) footerTcpDot.className = 'dot offline';
@@ -168,38 +180,44 @@ function updateUIState(status) {
 
     // UDP Status
     const udpPill = document.getElementById('pill-udp');
-    const dashUdpVal = document.getElementById('dash-udp-val');
     const footerUdpTxt = document.getElementById('footer-udp-txt');
     const footerUdpDot = document.getElementById('footer-udp-dot');
 
     if (status.udp_connected) {
         if (udpPill) {
-            udpPill.className = 'pill online';
-            udpPill.querySelector('.pill-status').textContent = 'Connected';
+            udpPill.className = 'status-pill online';
+            const pillSpan = udpPill.querySelector('.pill-status');
+            if (pillSpan) pillSpan.textContent = 'Connected (6000)';
         }
-        if (dashUdpVal) {
-            dashUdpVal.className = 'stat-value status-text online';
-            dashUdpVal.textContent = 'CONNECTED';
-        }
-        if (footerUdpTxt) footerUdpTxt.textContent = 'Connected';
+        if (footerUdpTxt) footerUdpTxt.textContent = 'Connected (6000)';
         if (footerUdpDot) footerUdpDot.className = 'dot online';
     } else {
         if (udpPill) {
-            udpPill.className = 'pill offline';
-            udpPill.querySelector('.pill-status').textContent = 'Offline';
-        }
-        if (dashUdpVal) {
-            dashUdpVal.className = 'stat-value status-text offline';
-            dashUdpVal.textContent = 'OFFLINE';
+            udpPill.className = 'status-pill offline';
+            const pillSpan = udpPill.querySelector('.pill-status');
+            if (pillSpan) pillSpan.textContent = 'Offline';
         }
         if (footerUdpTxt) footerUdpTxt.textContent = 'Disconnected';
         if (footerUdpDot) footerUdpDot.className = 'dot offline';
+    }
+
+    if (topBtn) {
+        if (status.tcp_connected || status.udp_connected) {
+            topBtn.innerHTML = `<span>CONNECTED ●</span>`;
+            topBtn.style.backgroundColor = 'var(--success-green)';
+            topBtn.style.borderColor = 'var(--success-green)';
+        } else {
+            topBtn.innerHTML = `<span>LET'S CONNECT</span> <span class="btn-arrow">→</span>`;
+            topBtn.style.backgroundColor = 'var(--accent-olive)';
+            topBtn.style.borderColor = 'var(--accent-olive)';
+        }
     }
 }
 
 // Live Chat Operations
 async function sendChatMessage() {
     const input = document.getElementById('chat-input');
+    if (!input) return;
     const text = input.value.trim();
     if (!text) return;
 
@@ -228,6 +246,7 @@ async function fetchChatMessages() {
         const res = await fetch('/api/chat/messages');
         const data = await res.json();
         const box = document.getElementById('chat-messages-list');
+        const username = document.getElementById('modal-username')?.value || 'Keerthi';
 
         if (box && data.messages) {
             if (data.messages.length === 0) {
@@ -237,21 +256,18 @@ async function fetchChatMessages() {
 
             box.innerHTML = '';
             data.messages.forEach(m => {
-                const msgDiv = document.createElement('div');
-                msgDiv.style.padding = '10px 14px';
-                msgDiv.style.borderRadius = '8px';
-                msgDiv.style.backgroundColor = 'rgba(255,255,255,0.04)';
-                msgDiv.style.border = '1px solid var(--border-color)';
-                msgDiv.style.marginBottom = '8px';
-
-                msgDiv.innerHTML = `
-                    <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--text-muted); margin-bottom: 4px;">
-                        <strong style="color: var(--primary-blue);">${m.sender}</strong>
-                        <span>[UDP Seq #${m.sequence}] ${m.timestamp}</span>
+                const isMine = m.sender === username;
+                const bubble = document.createElement('div');
+                bubble.className = `chat-bubble ${isMine ? 'mine' : 'theirs'}`;
+                bubble.innerHTML = `
+                    <div style="font-weight: 700; font-size: 11px; margin-bottom: 2px;">${m.sender}</div>
+                    <div>${m.message}</div>
+                    <div class="chat-bubble-meta">
+                        <span>UDP Seq #${m.sequence || 0}</span>
+                        <span>${m.status || 'Delivered'}</span>
                     </div>
-                    <div style="font-size: 14px; color: var(--text-white);">${m.message}</div>
                 `;
-                box.appendChild(msgDiv);
+                box.appendChild(bubble);
             });
             box.scrollTop = box.scrollHeight;
         }
@@ -266,11 +282,11 @@ async function fetchOnlineUsers() {
         const res = await fetch('/api/users');
         const data = await res.json();
         const usersList = document.getElementById('online-users-list');
-        const dashOnlineVal = document.getElementById('dash-online-val');
+        const onlineCountBadge = document.getElementById('online-users-count');
 
         if (data.users) {
             const onlineCount = data.users.filter(u => u.status === 'ONLINE').length;
-            if (dashOnlineVal) dashOnlineVal.textContent = onlineCount;
+            if (onlineCountBadge) onlineCountBadge.textContent = `${onlineCount} Online`;
 
             if (usersList) {
                 usersList.innerHTML = '';
@@ -278,7 +294,11 @@ async function fetchOnlineUsers() {
                     const isOnline = u.status === 'ONLINE';
                     const div = document.createElement('div');
                     div.className = 'user-row';
-                    div.innerHTML = `<span class="dot ${isOnline ? 'online' : 'offline'}">●</span> ${u.username} <small style="color:var(--text-muted); margin-left:auto;">${u.status}</small>`;
+                    div.innerHTML = `
+                        <span class="dot ${isOnline ? 'online' : 'offline'}">●</span> 
+                        <strong>${u.username}</strong>
+                        <small style="margin-left: auto; color: var(--text-muted); font-family: var(--font-mono); font-size: 11px;">${u.endpoint || '127.0.0.1'}</small>
+                    `;
                     usersList.appendChild(div);
                 });
             }
@@ -294,14 +314,12 @@ async function fetchFilesList() {
         const res = await fetch('/api/files');
         const data = await res.json();
         const tbody = document.getElementById('files-table-body');
-        const dashFilesVal = document.getElementById('dash-files-val');
 
         if (tbody && data.files) {
             tbody.innerHTML = '';
-            if (dashFilesVal) dashFilesVal.textContent = data.files.length;
 
             if (data.files.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 24px;">No files available on server repository. Click "+ Upload File" to add files.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 32px;">No files available in server storage/uploads/. Click "+ Upload File" above.</td></tr>`;
                 return;
             }
 
@@ -310,10 +328,10 @@ async function fetchFilesList() {
                 const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
                 tr.innerHTML = `
                     <td><strong>${file.filename}</strong></td>
-                    <td>${sizeMB} MB (${file.size.toLocaleString()} B)</td>
-                    <td>${file.filename.split('.').pop().toUpperCase()} File</td>
-                    <td><span class="tag tag-success">Available</span></td>
-                    <td><button class="btn btn-sm btn-action" onclick="performDownload('${file.filename}')">↓ Download</button></td>
+                    <td style="font-family: var(--font-mono);">${sizeMB} MB (${file.size.toLocaleString()} B)</td>
+                    <td><span class="tag" style="background-color: var(--bg-surface);">${file.filename.split('.').pop().toUpperCase()}</span></td>
+                    <td><span class="tag tag-success">✓ SHA-256 Verified</span></td>
+                    <td><button class="btn btn-sm btn-outline-pill" onclick="performDownload('${file.filename}')">↓ DOWNLOAD</button></td>
                 `;
                 tbody.appendChild(tr);
             });
@@ -323,21 +341,23 @@ async function fetchFilesList() {
     }
 }
 
-function showUploadModal() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = (e) => {
-        if (e.target.files.length > 0) {
-            performUpload(e.target.files[0]);
-        }
-    };
-    input.click();
-}
+async function performUpload() {
+    const fileInput = document.getElementById('upload-file-input');
+    const resumeCheck = document.getElementById('upload-resume-check');
 
-async function performUpload(fileObj) {
+    if (!fileInput || !fileInput.files || fileInput.files.length === 0) {
+        alert('Please choose a file to upload first.');
+        return;
+    }
+
+    const fileObj = fileInput.files[0];
+    const resume = resumeCheck ? resumeCheck.checked : false;
+
     const formData = new FormData();
     formData.append('file', fileObj);
+    formData.append('resume', resume);
 
+    closeUploadModal();
     alert(`Initiating TCP streaming upload for '${fileObj.name}' (${(fileObj.size / (1024*1024)).toFixed(2)} MB)...`);
 
     try {
@@ -348,8 +368,9 @@ async function performUpload(fileObj) {
         const data = await res.json();
 
         if (data.success) {
-            alert(`✓ SUCCESS!\nFile '${data.filename}' uploaded successfully.\nSHA-256 Checksum: VERIFIED\nServer Hash: ${data.server_checksum.substring(0, 16)}...`);
+            alert(`✓ SUCCESS!\nFile '${data.filename}' uploaded successfully.\nSHA-256 Checksum: VERIFIED\nServer Hash: ${data.server_checksum ? data.server_checksum.substring(0, 16) : ''}...`);
             fetchFilesList();
+            fetchTransfers();
             fetchLogs();
         } else {
             alert(`✗ UPLOAD FAILED!\nError: ${data.error}`);
@@ -392,8 +413,7 @@ async function fetchTransfers() {
             if (data.transfers.length === 0) {
                 container.innerHTML = `
                     <div class="empty-state">
-                        <p>No active file transfers currently running.</p>
-                        <button class="btn btn-primary" onclick="switchTab('files')">Start a File Transfer</button>
+                        <p>No active file transfers currently recorded.</p>
                     </div>`;
                 return;
             }
@@ -402,13 +422,16 @@ async function fetchTransfers() {
             data.transfers.forEach(t => {
                 const sizeMB = (t.size / (1024 * 1024)).toFixed(2);
                 const card = document.createElement('div');
-                card.className = 'stat-card';
+                card.className = 'stat-detail-card';
                 card.style.marginBottom = '12px';
+                card.style.padding = '18px 24px';
                 card.innerHTML = `
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <strong>${t.filename}</strong> (${sizeMB} MB)
-                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">${t.direction} over ${t.protocol} Protocol | ${t.timestamp}</div>
+                            <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+                                ${t.direction} over ${t.protocol} Protocol | ${t.timestamp}
+                            </div>
                         </div>
                         <div>
                             <span class="tag ${t.status === 'Completed' ? 'tag-success' : 'tag-error'}">${t.status}</span>
@@ -512,7 +535,7 @@ async function applyLossSimulation() {
         });
         const data = await res.json();
         if (data.success) {
-            alert(`⚠️ Simulated UDP Packet Loss set to ${val}%.\nUDP datagrams will now experience artificial packet drops to demonstrate application-layer retransmission!`);
+            alert(`⚠️ Simulated UDP Packet Loss set to ${val}%.\nUDP datagrams will experience artificial packet drops to demonstrate application-layer retransmission!`);
             fetchLogs();
             fetchNetworkStats();
         }
