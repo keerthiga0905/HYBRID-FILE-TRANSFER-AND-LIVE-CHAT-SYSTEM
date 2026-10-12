@@ -1046,29 +1046,78 @@ async function fetchNetworkStats() {
             const elTcpRecv = document.getElementById('stat-tcp-bytes-recv');
             const elTcpSpeedUp = document.getElementById('stat-tcp-speed-up');
             const elTcpSpeedDown = document.getElementById('stat-tcp-speed-down');
+            const elTcpResumed = document.getElementById('stat-tcp-resumed-count');
+            const elTcpFile = document.getElementById('stat-tcp-last-file');
+            const elTcpSize = document.getElementById('stat-tcp-last-size');
+            const elTcpDuration = document.getElementById('stat-tcp-last-duration');
+            const elTcpThroughput = document.getElementById('stat-tcp-throughput');
+            const elTcpStatus = document.getElementById('stat-tcp-last-status');
+            const elTcpChecksum = document.getElementById('stat-tcp-checksum-verified');
 
             if (elTcpSent) elTcpSent.textContent = formatBytes(data.tcp.bytes_sent);
             if (elTcpRecv) elTcpRecv.textContent = formatBytes(data.tcp.bytes_received);
             if (elTcpSpeedUp) elTcpSpeedUp.textContent = `${data.tcp.upload_speed_kbs || 0.0} KB/s`;
             if (elTcpSpeedDown) elTcpSpeedDown.textContent = `${data.tcp.download_speed_kbs || 0.0} KB/s`;
+            if (elTcpResumed) elTcpResumed.textContent = data.tcp.resumed_transfers_count || 0;
+
+            if (data.tcp.last_transfer) {
+                const lt = data.tcp.last_transfer;
+                if (elTcpFile) elTcpFile.textContent = lt.filename || 'None';
+                if (elTcpSize) elTcpSize.textContent = formatBytes(lt.filesize || 0);
+                if (elTcpDuration) elTcpDuration.textContent = `${lt.duration_sec || 0}s`;
+                if (elTcpThroughput) elTcpThroughput.textContent = `${lt.throughput_kbs || 0.0} KB/s (${lt.throughput_mbs || 0.0} MB/s)`;
+                if (elTcpStatus) {
+                    elTcpStatus.textContent = lt.status || 'Completed';
+                    elTcpStatus.className = lt.status === 'Completed' ? 'badge-success' : 'badge-warning';
+                }
+                if (elTcpChecksum) {
+                    elTcpChecksum.textContent = lt.checksum_verified ? 'Verified (Match Confirmed)' : 'Failed';
+                    elTcpChecksum.style.color = lt.checksum_verified ? 'var(--color-green)' : 'var(--color-terracotta)';
+                }
+            }
         }
 
         if (data.udp) {
             const elUdpSent = document.getElementById('stat-udp-bytes-sent');
             const elUdpRecv = document.getElementById('stat-udp-bytes-recv');
+            const elUdpMsgsSent = document.getElementById('stat-udp-msgs-sent');
+            const elUdpMsgsRecv = document.getElementById('stat-udp-msgs-recv');
             const elUdpAcks = document.getElementById('stat-udp-acks');
+            const elUdpTimeouts = document.getElementById('stat-udp-timeouts');
             const elUdpRetries = document.getElementById('stat-udp-retries');
+            const elUdpAppLoss = document.getElementById('stat-udp-app-loss');
             const elUdpSuccess = document.getElementById('stat-udp-success');
             const elUdpLoss = document.getElementById('stat-udp-loss');
             const metricRate = document.getElementById('metric-delivery-rate');
 
+            const elLatAvg = document.getElementById('stat-udp-latency-avg');
+            const elLatMin = document.getElementById('stat-udp-latency-min');
+            const elLatMax = document.getElementById('stat-udp-latency-max');
+            const elLatP50 = document.getElementById('stat-udp-latency-p50');
+            const elLatP90 = document.getElementById('stat-udp-latency-p90');
+            const elLatP95 = document.getElementById('stat-udp-latency-p95');
+
             if (elUdpSent) elUdpSent.textContent = formatBytes(data.udp.bytes_sent);
             if (elUdpRecv) elUdpRecv.textContent = formatBytes(data.udp.bytes_received);
+            if (elUdpMsgsSent) elUdpMsgsSent.textContent = data.udp.messages_sent || 0;
+            if (elUdpMsgsRecv) elUdpMsgsRecv.textContent = data.udp.messages_received || 0;
             if (elUdpAcks) elUdpAcks.textContent = data.udp.acks_received || 0;
+            if (elUdpTimeouts) elUdpTimeouts.textContent = data.udp.ack_timeouts || 0;
             if (elUdpRetries) elUdpRetries.textContent = data.udp.retransmissions || 0;
-            if (elUdpSuccess) elUdpSuccess.textContent = `${data.udp.success_percentage || 100.0}%`;
-            if (elUdpLoss) elUdpLoss.textContent = `${data.udp.loss_percentage || 0.0}%`;
-            if (metricRate) metricRate.textContent = `${data.udp.success_percentage || 100.0}%`;
+            if (elUdpAppLoss) elUdpAppLoss.textContent = `${data.udp.app_loss_count || 0} (${data.udp.app_loss_percentage || 0.0}%)`;
+            if (elUdpSuccess) elUdpSuccess.textContent = `${data.udp.app_success_percentage || 100.0}%`;
+            if (elUdpLoss) elUdpLoss.textContent = `${data.udp.app_loss_percentage || 0.0}%`;
+            if (metricRate) metricRate.textContent = `${data.udp.app_success_percentage || 100.0}%`;
+
+            if (data.udp.latency) {
+                const lat = data.udp.latency;
+                if (elLatAvg) elLatAvg.textContent = `${lat.avg_ms || 0.0} ms`;
+                if (elLatMin) elLatMin.textContent = lat.min_ms || 0.0;
+                if (elLatMax) elLatMax.textContent = lat.max_ms || 0.0;
+                if (elLatP50) elLatP50.textContent = `${lat.p50_ms || 0.0} ms`;
+                if (elLatP90) elLatP90.textContent = lat.p90_ms || 0.0;
+                if (elLatP95) elLatP95.textContent = lat.p95_ms || 0.0;
+            }
         }
     } catch (e) {
         console.warn('Fetch network stats error:', e);

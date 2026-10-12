@@ -616,10 +616,18 @@
                             <div class="metric-row"><span>Port</span> <strong>5000 / TCP Stream</strong></div>
                             <div class="metric-row"><span>TCP Bytes Sent</span> <strong id="stat-tcp-bytes-sent">0 B</strong></div>
                             <div class="metric-row"><span>TCP Bytes Received</span> <strong id="stat-tcp-bytes-recv">0 B</strong></div>
-                            <div class="metric-row"><span>Upload Speed</span> <strong id="stat-tcp-speed-up">0.0 KB/s</strong></div>
-                            <div class="metric-row"><span>Download Speed</span> <strong id="stat-tcp-speed-down">0.0 KB/s</strong></div>
-                            <div class="metric-row"><span>Framing Protocol</span> <strong>4-Byte Big-Endian Header</strong></div>
-                            <div class="metric-row"><span>Integrity Verification</span> <strong>Constant-Time SHA-256</strong></div>
+                            <div class="metric-row"><span>Instantaneous Upload Speed</span> <strong id="stat-tcp-speed-up">0.0 KB/s</strong></div>
+                            <div class="metric-row"><span>Instantaneous Download Speed</span> <strong id="stat-tcp-speed-down">0.0 KB/s</strong></div>
+                            <div class="metric-row"><span>Resumed Transfers Count</span> <strong id="stat-tcp-resumed-count" class="text-terracotta">0</strong></div>
+                            <div class="metric-row"><span>Last Transfer File</span> <strong id="stat-tcp-last-file">None</strong></div>
+                            <div class="metric-row"><span>Last Transfer Size</span> <strong id="stat-tcp-last-size">-</strong></div>
+                            <div class="metric-row"><span>Last Transfer Duration</span> <strong id="stat-tcp-last-duration">-</strong></div>
+                            <div class="metric-row"><span>Application Throughput</span> <strong id="stat-tcp-throughput">-</strong></div>
+                            <div class="metric-row"><span>Completion Status</span> <strong id="stat-tcp-last-status">Idle</strong></div>
+                            <div class="metric-row"><span>SHA-256 Verification</span> <strong id="stat-tcp-checksum-verified" style="color: var(--color-green);">Verified</strong></div>
+                            <div class="protocol-footnote" style="margin-top: 14px; font-size: 0.78rem; opacity: 0.8; line-height: 1.4; border-top: 1px dashed var(--border-color); padding-top: 10px;">
+                                ℹ️ <em>Note: TCP retransmissions, sliding-window flow control, and packet sequencing are managed in kernel space by the OS network stack. Applications receive reliable, verified byte streams.</em>
+                            </div>
                         </div>
 
                         <!-- UDP Metrics -->
@@ -632,13 +640,19 @@
                             
                             <div class="metric-row"><span>UDP Socket Status</span> <strong id="stat-udp-status">Ready</strong></div>
                             <div class="metric-row"><span>Port</span> <strong>6000 / UDP Datagram</strong></div>
-                            <div class="metric-row"><span>UDP Bytes Sent</span> <strong id="stat-udp-bytes-sent">0 B</strong></div>
-                            <div class="metric-row"><span>UDP Bytes Received</span> <strong id="stat-udp-bytes-recv">0 B</strong></div>
-                            <div class="metric-row"><span>ACK Datagrams Received</span> <strong id="stat-udp-acks">0</strong></div>
+                            <div class="metric-row"><span>Messages Sent / Received</span> <strong><span id="stat-udp-msgs-sent">0</span> / <span id="stat-udp-msgs-recv">0</span></strong></div>
+                            <div class="metric-row"><span>ACKs Received</span> <strong id="stat-udp-acks">0</strong></div>
+                            <div class="metric-row"><span>ACK Timeouts (1.0s deadline)</span> <strong id="stat-udp-timeouts" class="text-terracotta">0</strong></div>
                             <div class="metric-row"><span>Application Retransmissions</span> <strong id="stat-udp-retries">0</strong></div>
+                            <div class="metric-row"><span>App-Observed Message Loss</span> <strong id="stat-udp-app-loss">0 (0.0%)</strong></div>
                             <div class="metric-row"><span>Delivery Success Rate</span> <strong id="stat-udp-success">100.0%</strong></div>
-                            <div class="metric-row"><span>Packet Loss Percentage</span> <strong id="stat-udp-loss">0.0%</strong></div>
-                            <div class="metric-row"><span>ACK Timeout / Max Retries</span> <strong>1.0s / 3 Retries</strong></div>
+                            <div class="metric-row"><span>Average RTT Latency</span> <strong id="stat-udp-latency-avg">0.0 ms</strong></div>
+                            <div class="metric-row"><span>Latency Min / Max</span> <strong><span id="stat-udp-latency-min">0.0</span> / <span id="stat-udp-latency-max">0.0</span> ms</strong></div>
+                            <div class="metric-row"><span>Latency P50 (Median)</span> <strong id="stat-udp-latency-p50">0.0 ms</strong></div>
+                            <div class="metric-row"><span>Latency P90 / P95</span> <strong><span id="stat-udp-latency-p90">0.0</span> / <span id="stat-udp-latency-p95">0.0</span> ms</strong></div>
+                            <div class="protocol-footnote" style="margin-top: 14px; font-size: 0.78rem; opacity: 0.8; line-height: 1.4; border-top: 1px dashed var(--border-color); padding-top: 10px;">
+                                ⚠️ <em>Distinction: App-observed loss occurs when a message fails after 3 ACK timeouts. This does not prove an L2/L3 physical packet drop; network buffers or receiver delays produce identical socket results.</em>
+                            </div>
                         </div>
                     </div>
 

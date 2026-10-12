@@ -69,25 +69,33 @@ class UDPServer:
                 if not data:
                     continue
 
-                # Simulated Packet Loss Mode Safeguard
-                if self.simulated_loss_rate > 0.0 and random.random() < self.simulated_loss_rate:
-                    print_warning(f"[SIMULATED LOSS] Artificially dropped incoming UDP packet from {addr}!")
-                    log_event(f"[SIMULATED LOSS] Dropped UDP datagram from {addr}")
-                    try:
-                        from shared.stats import global_stats
-                        global_stats.record_udp_failure()
-                    except Exception:
-                        pass
-                    continue
-
                 try:
                     payload = json.loads(data.decode("utf-8"))
-                    if isinstance(payload, dict):
-                        self._handle_datagram(payload, addr)
-                    else:
-                        print_warning(f"Received non-dict UDP datagram from {addr}")
                 except (json.JSONDecodeError, UnicodeDecodeError) as err:
                     print_warning(f"Received malformed UDP datagram from {addr}: {err}")
+                    continue
+
+                if not isinstance(payload, dict):
+                    print_warning(f"Received non-dict UDP datagram from {addr}")
+                    continue
+
+                msg_type = payload.get("type", "").upper()
+
+                # Controlled Loss Simulation (Module 8 Rule 6):
+                # Affects ONLY intended test traffic (MSG, BROADCAST).
+                # Preserves infrastructure control traffic (JOIN, HEARTBEAT, LEAVE).
+                if self.simulated_loss_rate > 0.0 and msg_type in ["MSG", "BROADCAST"]:
+                    if random.random() < self.simulated_loss_rate:
+                        print_warning(f"[SIMULATED LOSS] Artificially dropped test UDP packet [{msg_type}] from {addr}!")
+                        log_event(f"[SIMULATED LOSS] Dropped test UDP datagram [{msg_type}] from {addr}")
+                        try:
+                            from shared.stats import global_stats
+                            global_stats.record_udp_failure()
+                        except Exception:
+                            pass
+                        continue
+
+                self._handle_datagram(payload, addr)
 
             except socket.error:
                 if not self.is_running:

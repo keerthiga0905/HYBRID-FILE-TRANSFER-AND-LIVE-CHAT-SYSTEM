@@ -141,7 +141,17 @@ class UDPClient:
                                         break
 
                             if matched_key is not None:
-                                self.pending_acks[matched_key]["status"] = "DELIVERED"
+                                ack_entry = self.pending_acks[matched_key]
+                                ack_entry["status"] = "DELIVERED"
+                                send_t = ack_entry.get("send_time")
+                                if send_t is not None:
+                                    rtt_ms = (time.perf_counter() - send_t) * 1000.0
+                                    try:
+                                        from shared.stats import global_stats
+                                        global_stats.record_udp_latency(rtt_ms)
+                                    except Exception:
+                                        pass
+
                                 print_success(f"UDP ACK [msg_id={msg_id}, seq={seq}] Received!")
                                 # Update history entry status
                                 for m in self.messages_history:
@@ -198,6 +208,11 @@ class UDPClient:
 
                             self.processed_sequences.add(seq)
                             self.processed_msg_ids.add(msg_id)
+                            try:
+                                from shared.stats import global_stats
+                                global_stats.record_udp_message_received()
+                            except Exception:
+                                pass
                             record = {
                                 "msg_id": msg_id,
                                 "sequence": seq,
@@ -349,7 +364,8 @@ class UDPClient:
                     "msg_id": msg_id,
                     "payload": msg_payload,
                     "retries": 0,
-                    "status": "PENDING"
+                    "status": "PENDING",
+                    "send_time": time.perf_counter()
                 }
 
         # Send initial datagram
@@ -359,6 +375,7 @@ class UDPClient:
             try:
                 from shared.stats import global_stats
                 global_stats.record_udp_send(len(raw_bytes))
+                global_stats.record_udp_message_sent()
             except Exception:
                 pass
             prefix = f"Private to [{target_recip}]" if mode == "PRIVATE" else "Group"
@@ -410,6 +427,7 @@ class UDPClient:
 
                 try:
                     from shared.stats import global_stats
+                    global_stats.record_udp_ack_timeout()
                     global_stats.record_udp_retransmit()
                 except Exception:
                     pass

@@ -121,6 +121,7 @@ class TCPClient:
             print_info(f"Streaming '{filename}' from byte offset {offset}/{filesize} in 4KB chunks...", tag="TCP")
             sent_bytes = offset
             start_time = datetime.now()
+            transfer_start_t = time.perf_counter()
 
             with open(file_path, "rb") as f:
                 if offset > 0:
@@ -141,13 +142,35 @@ class TCPClient:
 
             # Receive server verification response
             result = receive_message(self.sock)
-            if result and result.get("checksum_verified"):
+            transfer_duration = max(0.0001, time.perf_counter() - transfer_start_t)
+            bytes_transferred = sent_bytes - offset
+            throughput_kbs = (bytes_transferred / 1024.0) / transfer_duration
+            verified = bool(result and result.get("checksum_verified"))
+
+            try:
+                from shared.stats import global_stats
+                global_stats.record_tcp_transfer(
+                    filename=filename,
+                    filesize=filesize,
+                    duration_sec=transfer_duration,
+                    throughput_kbs=throughput_kbs,
+                    status="Completed" if verified else "Failed",
+                    checksum_verified=verified,
+                    is_resumed=(offset > 0),
+                    direction="Upload"
+                )
+            except Exception:
+                pass
+
+            if verified:
                 print_success(f"File '{filename}' uploaded successfully! SHA-256 verified.")
                 return {
                     "success": True,
                     "filename": filename,
                     "filesize": filesize,
                     "offset_resumed": offset,
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "client_checksum": client_checksum,
                     "server_checksum": result.get("server_checksum"),
                     "checksum_verified": True
@@ -157,6 +180,8 @@ class TCPClient:
                 return {
                     "success": False,
                     "error": result.get("error", "Checksum verification failed"),
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "checksum_verified": False
                 }
 
@@ -199,6 +224,7 @@ class TCPClient:
 
             print_info(f"Downloading '{clean_name}' starting from byte offset {received_bytes}/{filesize}...", tag="TCP")
             start_time = datetime.now()
+            transfer_start_t = time.perf_counter()
 
             with open(part_path, mode) as f:
                 while received_bytes < filesize:
@@ -222,9 +248,28 @@ class TCPClient:
                         speed = ((received_bytes - offset) / (1024 * 1024)) / (elapsed if elapsed > 0 else 0.001)
                         progress_callback(received_bytes, filesize, speed)
 
+            transfer_duration = max(0.0001, time.perf_counter() - transfer_start_t)
+            bytes_transferred = received_bytes - offset
+            throughput_kbs = (bytes_transferred / 1024.0) / transfer_duration
+
             # Compute SHA-256 on downloaded file
             actual_checksum = calculate_sha256(part_path)
             checksum_valid = verify_checksum(expected_checksum, actual_checksum)
+
+            try:
+                from shared.stats import global_stats
+                global_stats.record_tcp_transfer(
+                    filename=clean_name,
+                    filesize=filesize,
+                    duration_sec=transfer_duration,
+                    throughput_kbs=throughput_kbs,
+                    status="Completed" if checksum_valid else "Failed",
+                    checksum_verified=checksum_valid,
+                    is_resumed=(offset > 0),
+                    direction="Download"
+                )
+            except Exception:
+                pass
 
             if checksum_valid:
                 if dest_path.exists():
@@ -236,6 +281,8 @@ class TCPClient:
                     "filename": clean_name,
                     "filesize": filesize,
                     "offset_resumed": offset,
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "download_path": str(dest_path),
                     "checksum": actual_checksum,
                     "checksum_verified": True
@@ -246,6 +293,8 @@ class TCPClient:
                 return {
                     "success": False,
                     "error": "Downloaded file checksum mismatch",
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "checksum_verified": False
                 }
         except Exception as e:
@@ -400,6 +449,7 @@ class TCPClient:
 
         sent_bytes = offset
         start_time = datetime.now()
+        transfer_start_t = time.perf_counter()
         speed = 0.0
 
         try:
@@ -416,7 +466,27 @@ class TCPClient:
 
             # Receive completion confirmation from server relay
             result = receive_message(self.sock)
-            if result and result.get("status") == "SUCCESS":
+            transfer_duration = max(0.0001, time.perf_counter() - transfer_start_t)
+            bytes_transferred = sent_bytes - offset
+            throughput_kbs = (bytes_transferred / 1024.0) / transfer_duration
+            is_success = bool(result and result.get("status") == "SUCCESS")
+
+            try:
+                from shared.stats import global_stats
+                global_stats.record_tcp_transfer(
+                    filename=filename,
+                    filesize=filesize,
+                    duration_sec=transfer_duration,
+                    throughput_kbs=throughput_kbs,
+                    status="Completed" if is_success else "Failed",
+                    checksum_verified=is_success,
+                    is_resumed=(offset > 0),
+                    direction="Peer Upload"
+                )
+            except Exception:
+                pass
+
+            if is_success:
                 print_success(f"File streamed & staged successfully! [{transfer_id}] (Resumed from {offset} bytes)")
                 return {
                     "success": True,
@@ -425,6 +495,8 @@ class TCPClient:
                     "bytes_sent": sent_bytes,
                     "filesize": filesize,
                     "offset_resumed": offset,
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "speed_mbs": round(speed, 2),
                     "status": "STAGED_ON_SERVER"
                 }
@@ -481,6 +553,7 @@ class TCPClient:
         mode = "ab" if (verified_offset > 0 and part_path.exists()) else "wb"
         received_bytes = verified_offset
         start_time = datetime.now()
+        transfer_start_t = time.perf_counter()
 
         try:
             with open(part_path, mode) as f:
@@ -497,9 +570,28 @@ class TCPClient:
                     if progress_callback:
                         progress_callback(received_bytes, filesize, speed)
 
+            transfer_duration = max(0.0001, time.perf_counter() - transfer_start_t)
+            bytes_transferred = received_bytes - verified_offset
+            throughput_kbs = (bytes_transferred / 1024.0) / transfer_duration
+
             # Calculate SHA-256 over entire assembled file
             actual_checksum = calculate_sha256(part_path)
             checksum_valid = verify_checksum(expected_checksum, actual_checksum)
+
+            try:
+                from shared.stats import global_stats
+                global_stats.record_tcp_transfer(
+                    filename=clean_name,
+                    filesize=filesize,
+                    duration_sec=transfer_duration,
+                    throughput_kbs=throughput_kbs,
+                    status="Completed" if checksum_valid else "Failed",
+                    checksum_verified=checksum_valid,
+                    is_resumed=(verified_offset > 0),
+                    direction="Peer Download"
+                )
+            except Exception:
+                pass
 
             if checksum_valid:
                 # Rename the partial file to its final filename only after successful verification!
@@ -520,6 +612,8 @@ class TCPClient:
                     "saved_path": str(dest_path),
                     "checksum": actual_checksum,
                     "checksum_verified": True,
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "offset_resumed": verified_offset
                 }
             else:
@@ -529,6 +623,8 @@ class TCPClient:
                     "success": False,
                     "error": "Checksum verification failed - file corrupted or altered in transit",
                     "checksum_verified": False,
+                    "duration_sec": round(transfer_duration, 4),
+                    "throughput_kbs": round(throughput_kbs, 2),
                     "expected_checksum": expected_checksum,
                     "actual_checksum": actual_checksum
                 }
