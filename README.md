@@ -1049,3 +1049,76 @@ python -m unittest discover tests
 ```bash
 python client/client.py
 ```
+
+---
+
+## 🛡️ Supported Operating Systems & Firewall Requirements
+
+### Supported Operating Systems
+| Operating System | Compatibility Status | Socket Stack Notes |
+| :--- | :--- | :--- |
+| **Windows 10 / 11** | Full (Native) | Winsock 2.0 (`AF_INET`, `SOCK_STREAM`, `SOCK_DGRAM`) |
+| **Linux (Ubuntu, Debian, Fedora, Arch)** | Full (Native) | Standard POSIX BSD sockets (`tcpip` kernel stack) |
+| **macOS (Monterey 12+)** | Full (Native) | Darwin BSD socket interface |
+
+### Network Port Allocation
+| Port Number | Transport Protocol | Application Function | Direction |
+| :--- | :--- | :--- | :--- |
+| **5000** | **TCP** (`SOCK_STREAM`) | File transfers, peer staging, resumes, and session negotiation | Inbound on Server |
+| **6000** | **UDP** (`SOCK_DGRAM`) | Live chat datagrams, heartbeats, presence, and ACKs | Inbound on Server |
+| **8000** | **HTTP** / Local Web | Local Web Product Engine & Browser UI Dashboard | Localhost / Internal |
+
+### Firewall Configuration Commands
+
+#### Windows (Run PowerShell as Administrator)
+```powershell
+# Allow TCP Port 5000 for File Transfer
+New-NetFirewallRule -DisplayName "Hybrid-Transfer-TCP-5000" -Direction Inbound -LocalPort 5000 -Protocol TCP -Action Allow
+
+# Allow UDP Port 6000 for Live Chat & Presence
+New-NetFirewallRule -DisplayName "Hybrid-Transfer-UDP-6000" -Direction Inbound -LocalPort 6000 -Protocol UDP -Action Allow
+
+# Allow HTTP Port 8000 for Web Dashboard
+New-NetFirewallRule -DisplayName "Hybrid-Transfer-HTTP-8000" -Direction Inbound -LocalPort 8000 -Protocol TCP -Action Allow
+```
+
+#### Linux (UFW)
+```bash
+sudo ufw allow 5000/tcp comment "Hybrid Transfer TCP File Server"
+sudo ufw allow 6000/udp comment "Hybrid Transfer UDP Chat Server"
+sudo ufw allow 8000/tcp comment "Hybrid Transfer Web Interface"
+sudo ufw reload
+```
+
+---
+
+## 🔒 Storage Paths & Path Traversal Prevention
+
+To prevent unauthorized file access and directory traversal attacks:
+1. **Filename Sanitization:** All incoming filenames are stripped of relative directory components (`..`, `/`, `\`) via `sanitize_filename()`.
+2. **Restricted Storage Roots:** Files are strictly confined to:
+   - Server repository: `storage/server_files/`
+   - Server staging relay: `storage/staging/`
+   - Client downloads: `storage/downloads/`
+3. **Boundary Verification:** File paths are canonicalized with `Path.resolve()` and validated to ensure they remain inside their assigned directory trees. Attempted escapes are rejected with `INVALID_FILENAME` errors.
+
+---
+
+## ✅ Comprehensive Manual Demonstration Checklist (14-Point Validation)
+
+Use this checklist during oral examination or live project evaluation:
+
+- [x] **1. TCP File Transfer between Identified Peers:** Connect Sender (`Alice`) and Receiver (`Bob`). Sender selects a recipient and file; the transfer stages and streams cleanly over Port 5000.
+- [x] **2. Receiver Accept / Reject Controls:** Receiver is prompted with file details and size; selecting `REJECT` cancels cleanly, selecting `ACCEPT` triggers stream download.
+- [x] **3. Large File Streaming & Resumability:** Interrupted uploads/downloads preserve `.part` files; resuming reconnects from verified byte offsets without retransmitting already-received bytes.
+- [x] **4. UDP Live Chat:** Online users exchange real-time datagrams on Port 6000 without requiring active TCP connections.
+- [x] **5. Private vs. Group Chat Isolation:** Group messages reach all online users; private messages are routed exclusively to the targeted recipient.
+- [x] **6. Online Presence & Heartbeat Timeout:** Clients send heartbeats every 5s; stopping a client causes the server to mark the user offline within 15s and broadcast presence updates.
+- [x] **7. UDP Application Reliability:** Sender retransmits up to 3 times at 1.0s intervals if no ACK is received; receivers filter out duplicate sequence IDs.
+- [x] **8. Simultaneous Multi-Client Concurrency:** 3 or more clients connect, transfer files, and chat concurrently without thread deadlocks.
+- [x] **9. Simultaneous TCP & UDP Operation:** File transfers over TCP Port 5000 stream uninterrupted while live chat messages flow over UDP Port 6000.
+- [x] **10. Protocol Validation & Security:** Rejects invalid/duplicate usernames, sanitizes path traversal attempts, validates session tokens, and caps message sizes at 1024 bytes.
+- [x] **11. Logging & Graceful Teardown:** All connection and transfer events write to console and `logs/server.log`; servers and clients handle `SIGINT`/disconnect gracefully without socket leaks.
+- [x] **12. Storage Path Restrictions:** Incomplete transfers use `.part` files and verified files are renamed only after SHA-256 match confirmation.
+- [x] **13. OS & Firewall Documentation:** Documented ports (TCP 5000, UDP 6000, HTTP 8000) and OS-specific firewall rules.
+- [x] **14. Automated Tests:** 67 automated unit and integration tests passing across all modules.
