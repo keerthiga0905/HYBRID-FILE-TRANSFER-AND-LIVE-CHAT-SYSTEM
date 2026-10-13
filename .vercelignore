@@ -1,0 +1,30 @@
+# Python Bytecode and Caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local Storage and Logs
+storage/uploads/*
+storage/downloads/*
+storage/transfers/*
+!storage/uploads/.gitkeep
+!storage/downloads/.gitkeep
+!storage/transfers/.gitkeep
+logs/*.log
+
+# Tests and Test Artifacts
+tests/test_data_m8/
+tests/downloads_m8/
+
+# Git & IDE configs
+.git
+.gitignore
+.vscode
+.idea
