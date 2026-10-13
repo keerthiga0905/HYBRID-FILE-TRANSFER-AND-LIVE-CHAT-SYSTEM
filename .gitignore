@@ -19,6 +19,10 @@ Thumbs.db
 # Storage runtime files & staging
 storage/transfers/*
 !storage/transfers/.gitkeep
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/downloads/*
+!storage/downloads/.gitkeep
 storage/custom_inbox/
 storage/step_test.txt
 *.part
