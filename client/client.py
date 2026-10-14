@@ -11,6 +11,7 @@ from pathlib import Path
 # Add project root directory to python path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from typing import Optional
 from shared.config import DEFAULT_HOST, TCP_PORT, UDP_PORT
 from shared.utils import TermColor, print_info, print_success, print_error, print_warning
 from client.tcp_client import TCPClient
@@ -49,35 +50,6 @@ def prompt_connection_params() -> tuple[str, int, str]:
     return host, port, username
 
 
-def main() -> None:
-    print_banner()
-
-    host, port, username = prompt_connection_params()
-    client = TCPClient(host=host, port=port)
-
-    print_info(f"Connecting to TCP server at {host}:{port}...", tag="TCP")
-    if not client.connect():
-        print_error(f"Could not establish connection to {host}:{port}. Ensure server is running.")
-        sys.exit(1)
-
-    # Register username and obtain unique session ID
-    current_username = username
-    while True:
-        print_info(f"Registering username '{current_username}' with server...", tag="TCP")
-        resp = client.send_hello(client_name=current_username)
-
-        if resp and resp.get("status") == "SUCCESS":
-            session_id = resp.get("session_id", "N/A")
-            print(f"""
-{TermColor.GREEN}=============================================================
-  [SUCCESS] REGISTERED WITH TCP SERVER
-  Session ID: {session_id}
-  Username:   {current_username}
-  Server:     {host}:{port}
-============================================================={TermColor.RESET}""")
-            break
-        elif resp and resp.get("code") == "DUPLICATE_USERNAME":
-            print_error(f"Registration Failed: {resp.get('message')}")
 def print_progress(bytes_transferred: int, total_bytes: int, speed: float, prefix: str = "Transfer") -> None:
     """Renders real-time transfer progress bar with bytes and speed."""
     percent = (bytes_transferred / total_bytes * 100.0) if total_bytes > 0 else 100.0
